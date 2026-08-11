@@ -135,3 +135,5 @@ This repository is currently being prepared as the backend foundation for a Fest
 ## License
 
 This project is currently unlicensed.
+
+<img width="1200" height="1600" alt="WhatsApp Image 2026-08-11 at 11 09 40 AM" src="https://github.com/user-attachments/assets/0cc6d439-bbc3-4b3c-aa80-28c064f08638" />
