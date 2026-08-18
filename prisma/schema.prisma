@@ -8,9 +8,210 @@ datasource db {
   provider = "postgresql"
 }
 
-model User { 
-  id    String  @id @default(uuid())
-  email String  @unique
-  fullname  String
-  password String
-} 
+enum Role {
+  USER
+  ADMIN
+  STAFF 
+}
+
+enum OrganizerStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  CANCELLED
+  COMPLETED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  EXPIRED
+  FAILED
+}
+
+enum RefundStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+
+model User {
+  id               String            @id @default(uuid())
+  email            String            @unique
+  password         String
+  fullName         String            @map("full_name")
+  avatar           String?
+  role             Role              @default(USER)
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  // Relations
+  organizerProfile OrganizerProfile?
+  events           Event[]           @relation("UserEvents")
+  assignedEvents   EventStaff[]      // 🔹 Relasi staff ke event yang ditugaskan
+  orders           Order[]
+  refunds          Refund[]          @relation("UserRefunds")
+
+  @@map("users")
+}
+
+model OrganizerProfile {
+  id                 String          @id @default(uuid())
+  userId             String          @unique @map("user_id")
+  phoneNumber        String          @map("phone_number")
+  address            String
+  identityCardNumber String?         @map("identity_card_number")
+  status             OrganizerStatus @default(PENDING)
+  rejectionReason    String?         @map("rejection_reason")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+
+  // Relations
+  user               User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("organizer_profiles")
+}
+
+model Category {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  slug      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  events    Event[]
+
+  @@map("categories")
+}
+
+model Event {
+  id            String      @id @default(uuid())
+  organizerId   String      @map("organizer_id")
+  categoryId    String      @map("category_id")
+  title         String
+  description   String      @db.Text
+  location      String
+  startDatetime DateTime    @map("start_datetime")
+  endDatetime   DateTime    @map("end_datetime")
+  isRefundable  Boolean     @default(true) @map("is_refundable") // 🔹 Opsi Refundable
+  status        EventStatus @default(DRAFT)
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  organizer     User        @relation("UserEvents", fields: [organizerId], references: [id], onDelete: Cascade)
+  category      Category    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  ticketTypes   TicketType[]
+  staffs        EventStaff[] // 🔹 Relasi ke daftar staff penanggung jawab gate
+
+  @@map("events")
+}
+
+// 🔹 TABEL BARU: Junction Table Staff untuk Event
+model EventStaff {
+  id        String   @id @default(uuid())
+  eventId   String   @map("event_id")
+  userId    String   @map("user_id") // ID User ber-role STAFF
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId]) // 1 Staff hanya bisa didaftarkan 1x di event yang sama
+  @@map("event_staffs")
+}
+
+model TicketType {
+  id             String      @id @default(uuid())
+  eventId        String      @map("event_id")
+  name           String      // Contoh: Presale, VIP
+  price          Decimal     @db.Decimal(12, 2)
+  quota          Int         
+  availableQuota Int         @map("available_quota")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  event          Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  orderItems     OrderItem[]
+
+  @@map("ticket_types")
+}
+
+model Order {
+  id              String        @id @default(uuid())
+  orderNumber     String        @unique @map("order_number")
+  userId          String        @map("user_id")
+  totalAmount     Decimal       @map("total_amount") @db.Decimal(12, 2)
+  paymentStatus   PaymentStatus @default(PENDING) @map("payment_status")
+  paymentMethod   String?       @map("payment_method")
+  paymentUrl      String?       @map("payment_url")
+  pgTransactionId String?       @map("pg_transaction_id")
+  expiresAt       DateTime      @map("expires_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  user            User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  orderItems      OrderItem[]
+  refunds         Refund[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id           String        @id @default(uuid())
+  orderId      String        @map("order_id")
+  ticketTypeId String        @map("ticket_type_id")
+  quantity     Int           @default(1)
+  price        Decimal       @db.Decimal(12, 2)
+  createdAt    DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  order        Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  ticketType   TicketType    @relation(fields: [ticketTypeId], references: [id], onDelete: Restrict)
+  issuedTickets IssuedTicket[]
+
+  @@map("order_items")
+}
+
+model IssuedTicket {
+  id          String    @id @default(uuid())
+  orderItemId String    @map("order_item_id")
+  ticketCode  String    @unique @map("ticket_code")
+  isRedeemed  Boolean   @default(false) @map("is_redeemed")
+  isCancelled Boolean   @default(false) @map("is_cancelled")
+  redeemedAt  DateTime? @map("redeemed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  @@map("issued_tickets")
+}
+
+model Refund {
+  id             String       @id @default(uuid())
+  orderId        String       @map("order_id")
+  requestedById  String       @map("requested_by_id")
+  amount         Decimal      @db.Decimal(12, 2)
+  reason         String       @db.Text
+  pgRefundId     String?      @map("pg_refund_id") // ID refund Xendit
+  status         RefundStatus @default(PENDING)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  // Relations
+  order          Order        @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  requestedBy    User         @relation("UserRefunds", fields: [requestedById], references: [id], onDelete: Restrict)
+
+  @@map("refunds")
+}
