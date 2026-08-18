@@ -9,12 +9,15 @@ import { VerifyEmailDto } from './dto/verify-email.dto';
 import { randomInt } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { MailService } from 'src/mail/mail.service';
+import { LoginDto } from './dto/login.dto';
+import { JwtService } from '@nestjs/jwt';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mailService: MailService,
+    private readonly jwtService: JwtService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -122,6 +125,41 @@ export class AuthService {
 
     return {
       message: `Email ${user.email} verified successfully`,
+    };
+  }
+
+  async login(dto: LoginDto) {
+    const user = await this.prisma.user.findUnique({
+      where: {
+        email: dto.email,
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid Email or Password');
+    }
+
+    if (!user.emailVerified) {
+      throw new UnauthorizedException('Email not Verified');
+    }
+
+    const isPasswordValid = await bcrypt.compare(dto.password, user.password);
+
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid Email or Password');
+    }
+
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+    };
+
+    const accessToken = await this.jwtService.signAsync(payload); // ga seperti express, di nest kita lansung pakai jwtService untuk bikin token
+
+    return {
+      message: 'Login successful',
+      access_token: accessToken,
     };
   }
 }
