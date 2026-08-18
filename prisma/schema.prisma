@@ -14,6 +14,11 @@ enum Role {
   STAFF 
 }
 
+enum OtpType {
+  VERIFY_EMAIL
+  FORGOT_PASSWORD
+}
+
 enum OrganizerStatus {
   PENDING
   APPROVED
@@ -48,6 +53,7 @@ model User {
   fullName         String            @map("full_name")
   avatar           String?
   role             Role              @default(USER)
+  emailVerified    Boolean           @default(false) @map("email_verified")
   createdAt        DateTime          @default(now()) @map("created_at")
   updatedAt        DateTime          @updatedAt @map("updated_at")
 
@@ -57,6 +63,7 @@ model User {
   assignedEvents   EventStaff[]      // 🔹 Relasi staff ke event yang ditugaskan
   orders           Order[]
   refunds          Refund[]          @relation("UserRefunds")
+  otps             Otp[]
 
   @@map("users")
 }
@@ -214,4 +221,21 @@ model Refund {
   requestedBy    User         @relation("UserRefunds", fields: [requestedById], references: [id], onDelete: Restrict)
 
   @@map("refunds")
+}
+
+model Otp {
+  id        String   @id @default(uuid())
+  userId    String?  @map("user_id") // Opsional (Null jika user belum terdaftar/registrasi)
+  identifier String  // Email atau Nomor HP tujuan pengiriman OTP
+  code      String   // Kode OTP (Sangat disarankan di-HASH sebelum disimpan!)
+  type      OtpType
+  isUsed    Boolean  @default(false) @map("is_used")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations (Opsional, jika terhubung ke user yang sudah ada)
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([identifier, type]) // Index untuk mempercepat query lookup saat verifikasi
+  @@map("otps")
 }
