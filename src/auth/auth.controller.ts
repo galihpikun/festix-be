@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import { RegisterDto } from './dto/register.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { AuthService } from './auth.service';
@@ -7,6 +7,9 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { ForgotPassDto } from './dto/forgot-password.dto';
 import { VerifyForgotPassDto } from './dto/verify-forgot-pass.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { AuthGuard } from '@nestjs/passport';
+import { Roles } from './decorators/role.decorator';
+import { RoleGuard } from './guards/role.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -41,11 +44,13 @@ export class AuthController {
     return this.authService.resetPassword(dto);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @Roles('ADMIN')
+  @UseGuards(JwtAuthGuard, RoleGuard)
   @Get('me')
-  getMe() {
+  getMe(@Req() req:any) {
     return {
       message: 'You are authenticated',
+      data: req.user
     };
   }
 }

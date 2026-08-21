@@ -7,9 +7,11 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { MailService } from './mail/mail.service';
 import { MailModule } from './mail/mail.module';
+import { CategoriesController } from './categories/categories.controller';
+import { CategoriesModule } from './categories/categories.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, MailModule],
+  imports: [PrismaModule, AuthModule, MailModule, CategoriesModule],
   controllers: [AppController],
   providers: [AppService],
 })
