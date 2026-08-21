@@ -232,6 +232,7 @@ model Otp {
   type      OtpType
   isUsed    Boolean  @default(false) @map("is_used")
   expiresAt DateTime @map("expires_at")
+  verifiedAt DateTime?
   createdAt DateTime @default(now()) @map("created_at")
 
   // Relations (Opsional, jika terhubung ke user yang sudah ada)

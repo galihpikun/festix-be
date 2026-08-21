@@ -40,4 +40,33 @@ export class MailService {
       `,
     });
   }
+  async sendMailForgotPasssword(email: string, code: string) {
+    await this.transporter.sendMail({
+      from: `"Festix" Galih & Randu`,
+      to: email,
+      subject: 'Reset Password - Festix',
+      html: `
+        <div style="font-family: Arial, sans-serif;">
+          <h2>Reset Your Password</h2>
+
+          <p>
+            Thank you for registering on Festix.
+            Use the following OTP code to reset your password:
+          </p>
+
+          <h1 style="letter-spacing: 8px;">
+            ${code}
+          </h1>
+
+          <p>
+            This code will expire in <strong>15 minutes</strong>.
+          </p>
+
+          <p>
+            If you did not create this account, you can ignore this email.
+          </p>
+        </div>
+      `,
+    });
+  }
 }

@@ -11,6 +11,9 @@ import * as bcrypt from 'bcrypt';
 import { MailService } from 'src/mail/mail.service';
 import { LoginDto } from './dto/login.dto';
 import { JwtService } from '@nestjs/jwt';
+import { ForgotPassDto } from './dto/forgot-password.dto';
+import { VerifyForgotPassDto } from './dto/verify-forgot-pass.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Injectable()
 export class AuthService {
@@ -162,4 +165,155 @@ export class AuthService {
       access_token: accessToken,
     };
   }
+
+  async forgotPassword(dto: ForgotPassDto) {
+    const user = await this.prisma.user.findUnique({
+      where: {
+        email: dto.email,
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Email not Found');
+    }
+
+    const code = randomInt(100000, 1000000).toString(); //Generate kode OTP 6 digit random
+    const otpHash = await bcrypt.hash(code, 10); // Enkrip biar aman nyoh
+
+    await this.prisma.otp.create({
+      data: {
+        userId: user.id,
+        identifier: user.email,
+        code: otpHash,
+        type: 'FORGOT_PASSWORD',
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000), // OTP dalam 5 menit expired
+      },
+    });
+
+    await this.mailService.sendMailForgotPasssword(user.email, code);
+
+    return {
+      message: 'OTP Code has been sent to reset your password!',
+      email: user.email,
+    };
+  }
+
+  async verifyForgotPassword(dto: VerifyForgotPassDto) {
+  const user = await this.prisma.user.findUnique({
+    where: {
+      email: dto.email,
+    },
+  });
+
+  if (!user) {
+    throw new UnauthorizedException('Email not Found');
+  }
+
+  const otp = await this.prisma.otp.findFirst({
+    where: {
+      userId: user.id,
+      identifier: user.email,
+      type: 'FORGOT_PASSWORD',
+      isUsed: false,
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+  });
+
+  if (!otp) {
+    throw new UnauthorizedException('Invalid Email or Code');
+  }
+
+  if (otp.expiresAt < new Date()) {
+    throw new UnauthorizedException(
+      'Verification Code Has Expired, please request a new one',
+    );
+  }
+
+  const isValid = await bcrypt.compare(dto.code, otp.code);
+
+  if (!isValid) {
+    throw new UnauthorizedException('Invalid OTP');
+  }
+
+  await this.prisma.otp.update({
+    where: {
+      id: otp.id,
+    },
+    data: {
+      verifiedAt: new Date(),
+    },
+  });
+
+  return {
+    message: 'OTP verified successfully',
+    email: user.email,
+  };
+}
+
+  async resetPassword(dto: ResetPasswordDto) {
+  const user = await this.prisma.user.findUnique({
+    where: {
+      email: dto.email,
+    },
+  });
+
+  if (!user) {
+    throw new UnauthorizedException('Email not Found');
+  }
+
+  const otp = await this.prisma.otp.findFirst({
+    where: {
+      userId: user.id,
+      identifier: user.email,
+      type: 'FORGOT_PASSWORD',
+      isUsed: false,
+      verifiedAt: {
+        not: null,
+      },
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+  });
+
+  if (!otp) {
+    throw new UnauthorizedException(
+      'Please verify the OTP before resetting your password',
+    );
+  }
+
+  if (otp.expiresAt < new Date()) {
+    throw new UnauthorizedException(
+      'Verification session has expired, please request a new OTP',
+    );
+  }
+
+  const hashedPassword = await bcrypt.hash(dto.password, 10);
+
+  await this.prisma.$transaction([
+    this.prisma.user.update({
+      where: {
+        id: user.id,
+      },
+      data: {
+        password: hashedPassword,
+      },
+    }),
+
+    this.prisma.otp.update({
+      where: {
+        id: otp.id,
+      },
+      data: {
+        isUsed: true,
+      },
+    }),
+  ]);
+
+  return {
+    message: 'Password reset successfully',
+  };
+}
 }
