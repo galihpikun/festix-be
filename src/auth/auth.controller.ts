@@ -44,8 +44,7 @@ export class AuthController {
     return this.authService.resetPassword(dto);
   }
 
-  @Roles('ADMIN')
-  @UseGuards(JwtAuthGuard, RoleGuard)
+  @UseGuards(JwtAuthGuard)
   @Get('me')
   getMe(@Req() req:any) {
     return {
