@@ -1,139 +1,147 @@
 # Festix Backend
 
-Festix Backend is the server-side application for a ticket booking platform. This project is built to support booking tickets for events such as concerts, seminars, workshops, and other public activities.
+Backend platform ticketing Festix untuk autentikasi pengguna, pengelolaan kategori, dan proses pendaftaran organizer. Aplikasi dibangun dengan NestJS, TypeScript, Prisma ORM, dan PostgreSQL.
 
-The goal of this backend is to provide a solid foundation for managing users, events, and ticket booking flows in a scalable and maintainable way using NestJS and Prisma.
+## Fitur yang tersedia
 
-## What this project is about
+- [x] Registrasi pengguna
+- [x] Verifikasi email menggunakan OTP
+- [x] Login menggunakan JWT
+- [x] Mendapatkan profil pengguna yang sedang login
+- [x] Lupa password, verifikasi OTP, dan reset password
+- [x] Melihat daftar kategori
+- [x] Admin membuat, mengubah, dan menghapus kategori
+- [x] Pengajuan profil organizer
+- [x] Upload dokumen organizer ke Cloudinary
+- [x] Organizer melihat profil dan status pengajuan sendiri
+- [x] Admin melihat daftar/detail pengajuan organizer
+- [x] Admin menyetujui atau menolak pengajuan organizer
+- [x] Validasi request dengan `ValidationPipe`
+- [x] Proteksi endpoint dengan JWT dan role `ADMIN`
 
-This backend is designed for a ticket booking application where users can:
+Schema database juga sudah menyiapkan model event, tipe tiket, order, issued ticket, dan refund. Endpoint untuk modul-modul tersebut belum tersedia.
 
-- browse or manage events
-- book tickets for concerts, seminars, and other events
-- handle user authentication and account-related flows
-- connect to a PostgreSQL database through Prisma
-
-At the moment, the project is being set up as a backend foundation for the Festix ticket booking system.
-
-## Tech stack
-
-This project uses:
+## Teknologi
 
 - Node.js
-- NestJS for the backend framework
+- NestJS 11
 - TypeScript
-- Prisma ORM
-- PostgreSQL database
+- Prisma ORM 7 dengan PostgreSQL adapter
+- PostgreSQL
 - Express
-- dotenv for environment variables
-- Jest for testing
-- ESLint and Prettier for code quality
+- Jest
+- ESLint dan Prettier
 
-## Packages installed
+## Package yang ter-install
 
-### Main dependencies
+### Dependencies
 
-- @nestjs/common
-- @nestjs/core
-- @nestjs/platform-express
-- @prisma/adapter-pg
-- @prisma/client
-- dotenv
-- pg
-- reflect-metadata
-- rxjs
+- `@nestjs/common`, `@nestjs/core`, `@nestjs/jwt`, `@nestjs/passport`, `@nestjs/platform-express`
+- `@prisma/adapter-pg`, `@prisma/client`
+- `bcrypt`, `class-transformer`, `class-validator`
+- `cloudinary`, `cors`, `dotenv`
+- `jsonwebtoken`, `nodemailer`, `passport`, `passport-jwt`
+- `pg`, `reflect-metadata`, `rxjs`, `slugify`
 
-### Development dependencies
+### Dev dependencies
 
-- @nestjs/cli
-- @nestjs/schematics
-- @nestjs/testing
-- @types/express
-- @types/jest
-- @types/node
-- @types/pg
-- @types/supertest
-- eslint
-- eslint-config-prettier
-- eslint-plugin-prettier
-- jest
-- prettier
-- prisma
-- ts-jest
-- ts-node
-- tsconfig-paths
-- typescript
-- typescript-eslint
+- `@eslint/eslintrc`, `@eslint/js`
+- `@nestjs/cli`, `@nestjs/schematics`, `@nestjs/testing`
+- `@types/express`, `@types/jest`, `@types/multer`, `@types/node`, `@types/nodemailer`, `@types/pg`, `@types/supertest`
+- `eslint`, `eslint-config-prettier`, `eslint-plugin-prettier`, `globals`
+- `jest`, `prettier`, `prisma`, `source-map-support`, `supertest`
+- `ts-jest`, `ts-loader`, `ts-node`, `tsconfig-paths`
+- `typescript`, `typescript-eslint`
 
-## Project structure
+## Environment variable
 
-- src/ - main NestJS application source code
-- prisma/ - Prisma schema and database setup files
-- generated/prisma/ - generated Prisma client
-- test/ - end-to-end and test-related files
+Buat file `.env` di root project. README ini hanya mencantumkan nama variabel; isi nilai dan kredensial disimpan secara lokal.
 
-## Environment setup
+- [x] `DATABASE_URL` - koneksi PostgreSQL untuk Prisma
+- [x] `JWT_SECRET` - secret untuk JWT
+- [x] `MAIL_USER` - akun Gmail pengirim OTP
+- [x] `MAIL_PASSWORD` - password atau app password akun email
+- [x] `CLOUDINARY_CLOUD_NAME` - Cloudinary cloud name
+- [x] `CLOUDINARY_API_KEY` - Cloudinary API key
+- [x] `CLOUDINARY_API_SECRET` - Cloudinary API secret
+- [ ] `PORT` - port server, opsional; default `3000`
 
-Create a .env file in the project root and set your database connection string:
-
-```bash
-DATABASE_URL=your_postgres_connection_string
-```
-
-## Installation
-
-Install all project dependencies:
+## Instalasi
 
 ```bash
 npm install
 ```
 
-## Database setup
+## Database
 
-Generate the Prisma client and prepare the database:
+Generate Prisma Client dan jalankan migration:
 
 ```bash
 npx prisma generate
 npx prisma migrate dev
 ```
 
-## Run the project
+## Menjalankan aplikasi
 
-### Development mode
+Development:
 
 ```bash
 npm run start:dev
 ```
 
-### Production mode
+Production:
 
 ```bash
 npm run build
 npm run start:prod
 ```
 
-## Run tests
+## Endpoint utama
 
-```bash
-npm run test
-npm run test:e2e
-```
+Base URL default: `http://localhost:3000`
 
-## Available scripts
+| Method   | Endpoint                       | Keterangan                          |
+| -------- | ------------------------------ | ----------------------------------- |
+| `GET`    | `/`                            | Health check sederhana              |
+| `GET`    | `/users`                       | Mendapatkan data user               |
+| `POST`   | `/auth/register`               | Registrasi                          |
+| `POST`   | `/auth/verify-email`           | Verifikasi email                    |
+| `POST`   | `/auth/login`                  | Login                               |
+| `POST`   | `/auth/forgot-password`        | Meminta OTP reset password          |
+| `POST`   | `/auth/verify-forgot-password` | Verifikasi OTP reset password       |
+| `POST`   | `/auth/reset-password`         | Mengganti password                  |
+| `GET`    | `/auth/me`                     | Profil user terautentikasi          |
+| `GET`    | `/categories`                  | Daftar kategori                     |
+| `POST`   | `/categories`                  | Membuat kategori oleh admin         |
+| `PUT`    | `/categories/:id`              | Mengubah kategori oleh admin        |
+| `DELETE` | `/categories/:id`              | Menghapus kategori oleh admin       |
+| `POST`   | `/organizer/apply`             | Mengajukan organizer dengan dokumen |
+| `GET`    | `/organizer/me`                | Profil organizer sendiri            |
+| `GET`    | `/organizer/admin`             | Daftar pengajuan untuk admin        |
+| `GET`    | `/organizer/admin/:id`         | Detail pengajuan untuk admin        |
+| `PATCH`  | `/organizer/admin/:id/approve` | Menyetujui pengajuan                |
+| `PATCH`  | `/organizer/admin/:id/reject`  | Menolak pengajuan                   |
 
-- npm run start - start the app
-- npm run start:dev - start in watch mode
-- npm run start:debug - start in debug mode
-- npm run build - build the project
-- npm run test - run unit tests
-- npm run test:e2e - run e2e tests
+## Script yang tersedia
 
-## Notes
+- `npm run start` - menjalankan aplikasi
+- `npm run start:dev` - menjalankan aplikasi dalam watch mode
+- `npm run start:debug` - menjalankan aplikasi dalam debug watch mode
+- `npm run build` - build aplikasi
+- `npm run lint` - menjalankan ESLint
+- `npm run format` - memformat source code
+- `npm run test` - unit test
+- `npm run test:watch` - unit test dalam watch mode
+- `npm run test:cov` - unit test dengan coverage
+- `npm run test:e2e` - end-to-end test
 
-This repository is currently being prepared as the backend foundation for a Festix ticket booking application. The Prisma schema is already connected to PostgreSQL, and the project structure is ready for adding features such as events, bookings, tickets, and user management.
+## Struktur project
+
+- `src/` - source code NestJS dan modul fitur
+- `prisma/` - schema dan migration Prisma
+- `generated/prisma/` - Prisma Client hasil generate
+- `test/` - konfigurasi dan file end-to-end test
 
 ## License
 
-This project is currently unlicensed.
-
-<img width="1200" height="1600" alt="WhatsApp Image 2026-08-11 at 11 09 40 AM" src="https://github.com/user-attachments/assets/0cc6d439-bbc3-4b3c-aa80-28c064f08638" />
+Project ini belum memiliki lisensi.
