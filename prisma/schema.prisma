@@ -46,6 +46,20 @@ enum RefundStatus {
   FAILED
 }
 
+enum OrganizerDocumentType {
+  BUSINESS_LICENSE
+  GUARANTEE_LETTER
+  ORGANIZATION_REGISTRATION
+  IDENTITY_CARD
+}
+
+enum OrganizerDocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+
 
 model User {
   id               String            @id @default(uuid())
@@ -72,18 +86,50 @@ model User {
 model OrganizerProfile {
   id                 String          @id @default(uuid())
   userId             String          @unique @map("user_id")
+
+  organizationName   String          @map("organization_name")
   phoneNumber        String          @map("phone_number")
   address            String
+
   identityCardNumber String?         @map("identity_card_number")
+
+  bankName           String          @map("bank_name")
+  bankAccountNumber  String          @map("bank_account_number")
+  bankAccountName    String          @map("bank_account_name")
+
   status             OrganizerStatus @default(PENDING)
   rejectionReason    String?         @map("rejection_reason")
+
   createdAt          DateTime        @default(now()) @map("created_at")
   updatedAt          DateTime        @updatedAt @map("updated_at")
 
   // Relations
-  user               User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documents          OrganizerDocument[]
 
   @@map("organizer_profiles")
+}
+
+model OrganizerDocument {
+  id            String                  @id @default(uuid())
+  organizerId   String                  @map("organizer_id")
+
+  type          OrganizerDocumentType
+  status        OrganizerDocumentStatus @default(PENDING)
+
+  fileUrl       String                  @map("file_url")
+  publicId      String                  @map("public_id")
+
+  rejectionReason String?               @map("rejection_reason")
+
+  createdAt     DateTime                @default(now()) @map("created_at")
+  updatedAt     DateTime                @updatedAt @map("updated_at")
+
+  // Relations
+  organizer     OrganizerProfile        @relation(fields: [organizerId], references: [id], onDelete: Cascade)
+
+  @@unique([organizerId, type])
+  @@map("organizer_documents")
 }
 
 model Category {
