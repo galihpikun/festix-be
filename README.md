@@ -18,8 +18,38 @@ Backend platform ticketing Festix untuk autentikasi pengguna, pengelolaan katego
 - [x] Admin menyetujui atau menolak pengajuan organizer
 - [x] Validasi request dengan `ValidationPipe`
 - [x] Proteksi endpoint dengan JWT dan role `ADMIN`
+- [x] Membuat dan mengelola event (organizer/admin)
+- [x] Publish event untuk publik
+- [x] Melihat detail event
+- [x] Filter dan browse event berdasarkan kategori
+- [x] Mengelola tipe tiket untuk event
+- [x] Menampilkan tiket tersedia dan kuota
+- [x] Pembelian tiket (order)
+- [x] Pelacakan status pembayaran
+- [x] Issuance tiket otomatis setelah pembayaran
+- [x] Sistem refund dengan tracking status
+- [x] Penugasan staff ke event
+- [x] Upload gambar event dan venue ke Cloudinary
+- [x] Email notification untuk berbagai event
 
-Schema database juga sudah menyiapkan model event, tipe tiket, order, issued ticket, dan refund. Endpoint untuk modul-modul tersebut belum tersedia.
+## Database Model
+
+Aplikasi menggunakan model data berikut:
+
+- **User** - Data pengguna dengan role (USER, ADMIN, STAFF)
+- **OrganizerProfile** - Profil organizer dengan detail organisasi dan bank
+- **OrganizerDocument** - Dokumen verifikasi organizer (license, guarantee letter, dll)
+- **Category** - Kategori event (musik, bisnis, edukasi, dll)
+- **Event** - Detail event dengan cover image, tanggal, lokasi, dan status
+- **EventStaff** - Junction table untuk menugaskan staff ke event
+- **TicketType** - Jenis tiket untuk event dengan harga dan kuota
+- **Order** - Pesanan/pembelian tiket oleh user
+- **OrderItem** - Item individual dalam order
+- **IssuedTicket** - Tiket yang diterbitkan dengan unique ticket code
+- **Refund** - Permintaan refund untuk order
+- **Otp** - OTP untuk verifikasi email atau reset password
+
+Setiap model memiliki timestamp (createdAt, updatedAt) dan relasi yang sesuai.
 
 ## Teknologi
 
@@ -121,6 +151,14 @@ Base URL default: `http://localhost:3000`
 | `GET`    | `/organizer/admin/:id`         | Detail pengajuan untuk admin        |
 | `PATCH`  | `/organizer/admin/:id/approve` | Menyetujui pengajuan                |
 | `PATCH`  | `/organizer/admin/:id/reject`  | Menolak pengajuan                   |
+| `POST`   | `/events`                      | Membuat event (organizer)           |
+| `GET`    | `/events`                      | Daftar event public                 |
+| `GET`    | `/events/:id`                  | Detail event                        |
+| `PUT`    | `/events/:id`                  | Update event (organizer/admin)      |
+| `PATCH`  | `/events/:id/publish`          | Publish event                       |
+| `DELETE` | `/events/:id`                  | Hapus event (organizer/admin)       |
+| `POST`   | `/events/:id/staff`            | Tambah staff ke event               |
+| `DELETE` | `/events/:id/staff/:staffId`   | Hapus staff dari event              |
 
 ## Script yang tersedia
 
@@ -138,6 +176,13 @@ Base URL default: `http://localhost:3000`
 ## Struktur project
 
 - `src/` - source code NestJS dan modul fitur
+  - `auth/` - modul autentikasi, registrasi, login, JWT, OTP
+  - `categories/` - modul kategori event
+  - `organizer/` - modul profil organizer dan verifikasi dokumen
+  - `events/` - modul pembuatan, pengelolaan, dan browsing event
+  - `mail/` - modul email notification dan OTP sender
+  - `cloudinary/` - modul upload gambar ke Cloudinary
+  - `prisma/` - modul database service
 - `prisma/` - schema dan migration Prisma
 - `generated/prisma/` - Prisma Client hasil generate
 - `test/` - konfigurasi dan file end-to-end test
