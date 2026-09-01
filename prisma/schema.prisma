@@ -28,7 +28,9 @@ enum OrganizerStatus {
 
 enum EventStatus {
   DRAFT
+  PENDING_REVIEW
   PUBLISHED
+  REJECTED
   CANCELLED
   COMPLETED
 }
@@ -146,24 +148,35 @@ model Category {
 }
 
 model Event {
-  id            String      @id @default(uuid())
-  organizerId   String      @map("organizer_id")
-  categoryId    String      @map("category_id")
-  title         String
-  description   String      @db.Text
-  location      String
-  startDatetime DateTime    @map("start_datetime")
-  endDatetime   DateTime    @map("end_datetime")
-  isRefundable  Boolean     @default(true) @map("is_refundable") // 🔹 Opsi Refundable
-  status        EventStatus @default(DRAFT)
-  createdAt     DateTime    @default(now()) @map("created_at")
-  updatedAt     DateTime    @updatedAt @map("updated_at")
+  id              String      @id @default(uuid())
+  organizerId     String      @map("organizer_id")
+  categoryId      String      @map("category_id")
 
-  // Relations
-  organizer     User        @relation("UserEvents", fields: [organizerId], references: [id], onDelete: Cascade)
-  category      Category    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  ticketTypes   TicketType[]
-  staffs        EventStaff[] // 🔹 Relasi ke daftar staff penanggung jawab gate
+  title           String
+  description     String      @db.Text
+  location        String
+
+  coverImageUrl   String      @map("cover_image_url")
+  coverImageId    String      @map("cover_image_id")
+
+  venueImageUrl   String?     @map("venue_image_url")
+  venueImageId    String?     @map("venue_image_id")
+
+  startDatetime   DateTime    @map("start_datetime")
+  endDatetime     DateTime    @map("end_datetime")
+
+  isRefundable    Boolean     @default(true) @map("is_refundable")
+
+  status          EventStatus @default(DRAFT)
+  rejectionReason String?     @map("rejection_reason")
+
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  organizer       User        @relation("UserEvents", fields: [organizerId], references: [id], onDelete: Cascade)
+  category        Category    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  ticketTypes     TicketType[]
+  staffs          EventStaff[]
 
   @@map("events")
 }
@@ -186,20 +199,24 @@ model EventStaff {
 model TicketType {
   id             String      @id @default(uuid())
   eventId        String      @map("event_id")
-  name           String      // Contoh: Presale, VIP
+
+  name           String
   price          Decimal     @db.Decimal(12, 2)
-  quota          Int         
+
+  quota          Int
   availableQuota Int         @map("available_quota")
+
+  imageUrl       String?     @map("image_url")
+  imageId        String?     @map("image_id")
+
   createdAt      DateTime    @default(now()) @map("created_at")
   updatedAt      DateTime    @updatedAt @map("updated_at")
 
-  // Relations
   event          Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
   orderItems     OrderItem[]
 
   @@map("ticket_types")
 }
-
 model Order {
   id              String        @id @default(uuid())
   orderNumber     String        @unique @map("order_number")
