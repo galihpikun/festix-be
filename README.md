@@ -1,6 +1,18 @@
 # Festix Backend
 
-Backend platform ticketing Festix untuk autentikasi pengguna, pengelolaan kategori, dan proses pendaftaran organizer. Aplikasi dibangun dengan NestJS, TypeScript, Prisma ORM, dan PostgreSQL.
+Backend platform ticketing Festix untuk manajemen event, user authentication, organizer verification, dan event approval. Aplikasi dibangun dengan NestJS, TypeScript, Prisma ORM, dan PostgreSQL.
+
+## Deskripsi Proyek
+
+Festix Backend adalah backend untuk sistem ticketing yang memungkinkan:
+
+- **User Management**: Registrasi, autentikasi, verifikasi email dengan OTP
+- **Event Management**: Organizer dapat membuat dan mengelola event, admin me-review dan approve event
+- **Organizer Profiles**: Organizer dapat mendaftar dengan verifikasi dokumen lengkap
+- **Event Categories**: Pengorganisasian event berdasarkan kategori
+- **Image Management**: Upload cover image dan venue image untuk event menggunakan Cloudinary
+
+Fitur booking tiket, payment, dan refund sudah ter-design di database schema namun masih dalam tahap pengembangan endpoint.
 
 ## Fitur yang tersedia
 
@@ -11,45 +23,22 @@ Backend platform ticketing Festix untuk autentikasi pengguna, pengelolaan katego
 - [x] Lupa password, verifikasi OTP, dan reset password
 - [x] Melihat daftar kategori
 - [x] Admin membuat, mengubah, dan menghapus kategori
-- [x] Pengajuan profil organizer
+- [x] Pengajuan profil organizer dengan dokumen
 - [x] Upload dokumen organizer ke Cloudinary
 - [x] Organizer melihat profil dan status pengajuan sendiri
 - [x] Admin melihat daftar/detail pengajuan organizer
 - [x] Admin menyetujui atau menolak pengajuan organizer
+- [x] Membuat event oleh organizer
+- [x] Update event oleh organizer
+- [x] Submit event untuk review admin
+- [x] Admin review dan approve/reject event
+- [x] Melihat daftar event publik
+- [x] Melihat detail event
+- [x] Upload cover image dan venue image ke Cloudinary
 - [x] Validasi request dengan `ValidationPipe`
 - [x] Proteksi endpoint dengan JWT dan role `ADMIN`
-- [x] Membuat dan mengelola event (organizer/admin)
-- [x] Publish event untuk publik
-- [x] Melihat detail event
-- [x] Filter dan browse event berdasarkan kategori
-- [x] Mengelola tipe tiket untuk event
-- [x] Menampilkan tiket tersedia dan kuota
-- [x] Pembelian tiket (order)
-- [x] Pelacakan status pembayaran
-- [x] Issuance tiket otomatis setelah pembayaran
-- [x] Sistem refund dengan tracking status
-- [x] Penugasan staff ke event
-- [x] Upload gambar event dan venue ke Cloudinary
-- [x] Email notification untuk berbagai event
 
-## Database Model
-
-Aplikasi menggunakan model data berikut:
-
-- **User** - Data pengguna dengan role (USER, ADMIN, STAFF)
-- **OrganizerProfile** - Profil organizer dengan detail organisasi dan bank
-- **OrganizerDocument** - Dokumen verifikasi organizer (license, guarantee letter, dll)
-- **Category** - Kategori event (musik, bisnis, edukasi, dll)
-- **Event** - Detail event dengan cover image, tanggal, lokasi, dan status
-- **EventStaff** - Junction table untuk menugaskan staff ke event
-- **TicketType** - Jenis tiket untuk event dengan harga dan kuota
-- **Order** - Pesanan/pembelian tiket oleh user
-- **OrderItem** - Item individual dalam order
-- **IssuedTicket** - Tiket yang diterbitkan dengan unique ticket code
-- **Refund** - Permintaan refund untuk order
-- **Otp** - OTP untuk verifikasi email atau reset password
-
-Setiap model memiliki timestamp (createdAt, updatedAt) dan relasi yang sesuai.
+Database models sudah tersedia untuk ticket types, orders, refunds, dan event staff (relasi), namun endpoints untuk fitur-fitur tersebut masih dalam tahap development.
 
 ## Teknologi
 
@@ -130,35 +119,51 @@ npm run start:prod
 
 Base URL default: `http://localhost:3000`
 
-| Method   | Endpoint                       | Keterangan                          |
-| -------- | ------------------------------ | ----------------------------------- |
-| `GET`    | `/`                            | Health check sederhana              |
-| `GET`    | `/users`                       | Mendapatkan data user               |
-| `POST`   | `/auth/register`               | Registrasi                          |
-| `POST`   | `/auth/verify-email`           | Verifikasi email                    |
-| `POST`   | `/auth/login`                  | Login                               |
-| `POST`   | `/auth/forgot-password`        | Meminta OTP reset password          |
-| `POST`   | `/auth/verify-forgot-password` | Verifikasi OTP reset password       |
-| `POST`   | `/auth/reset-password`         | Mengganti password                  |
-| `GET`    | `/auth/me`                     | Profil user terautentikasi          |
-| `GET`    | `/categories`                  | Daftar kategori                     |
-| `POST`   | `/categories`                  | Membuat kategori oleh admin         |
-| `PUT`    | `/categories/:id`              | Mengubah kategori oleh admin        |
-| `DELETE` | `/categories/:id`              | Menghapus kategori oleh admin       |
-| `POST`   | `/organizer/apply`             | Mengajukan organizer dengan dokumen |
-| `GET`    | `/organizer/me`                | Profil organizer sendiri            |
-| `GET`    | `/organizer/admin`             | Daftar pengajuan untuk admin        |
-| `GET`    | `/organizer/admin/:id`         | Detail pengajuan untuk admin        |
-| `PATCH`  | `/organizer/admin/:id/approve` | Menyetujui pengajuan                |
-| `PATCH`  | `/organizer/admin/:id/reject`  | Menolak pengajuan                   |
-| `POST`   | `/events`                      | Membuat event (organizer)           |
-| `GET`    | `/events`                      | Daftar event public                 |
-| `GET`    | `/events/:id`                  | Detail event                        |
-| `PUT`    | `/events/:id`                  | Update event (organizer/admin)      |
-| `PATCH`  | `/events/:id/publish`          | Publish event                       |
-| `DELETE` | `/events/:id`                  | Hapus event (organizer/admin)       |
-| `POST`   | `/events/:id/staff`            | Tambah staff ke event               |
-| `DELETE` | `/events/:id/staff/:staffId`   | Hapus staff dari event              |
+### Auth
+
+| Method | Endpoint                       | Deskripsi                     | Auth |
+| ------ | ------------------------------ | ----------------------------- | ---- |
+| `POST` | `/auth/register`               | Registrasi user baru          | None |
+| `POST` | `/auth/verify-email`           | Verifikasi email dengan OTP   | None |
+| `POST` | `/auth/login`                  | Login dengan email & password | None |
+| `POST` | `/auth/forgot-password`        | Meminta OTP reset password    | None |
+| `POST` | `/auth/verify-forgot-password` | Verifikasi OTP reset password | None |
+| `POST` | `/auth/reset-password`         | Mengganti password            | None |
+| `GET`  | `/auth/me`                     | Profil user terautentikasi    | JWT  |
+
+### Categories
+
+| Method   | Endpoint          | Deskripsi                  | Auth       |
+| -------- | ----------------- | -------------------------- | ---------- |
+| `GET`    | `/categories`     | Daftar kategori            | JWT        |
+| `POST`   | `/categories`     | Membuat kategori (admin)   | JWT, ADMIN |
+| `PUT`    | `/categories/:id` | Mengubah kategori (admin)  | JWT, ADMIN |
+| `DELETE` | `/categories/:id` | Menghapus kategori (admin) | JWT, ADMIN |
+
+### Organizer
+
+| Method  | Endpoint                       | Deskripsi                      | Auth       |
+| ------- | ------------------------------ | ------------------------------ | ---------- |
+| `POST`  | `/organizer/apply`             | Mengajukan organizer + dokumen | JWT        |
+| `GET`   | `/organizer/me`                | Profil organizer sendiri       | JWT        |
+| `GET`   | `/organizer/admin`             | Daftar pengajuan organizer     | JWT, ADMIN |
+| `GET`   | `/organizer/admin/:id`         | Detail pengajuan organizer     | JWT, ADMIN |
+| `PATCH` | `/organizer/admin/:id/approve` | Menyetujui pengajuan organizer | JWT, ADMIN |
+| `PATCH` | `/organizer/admin/:id/reject`  | Menolak pengajuan organizer    | JWT, ADMIN |
+
+### Events
+
+| Method  | Endpoint                    | Deskripsi                 | Auth       |
+| ------- | --------------------------- | ------------------------- | ---------- |
+| `GET`   | `/events`                   | Daftar event publik       | None       |
+| `GET`   | `/events/:id`               | Detail event publik       | None       |
+| `POST`  | `/events`                   | Membuat event (organizer) | JWT        |
+| `PATCH` | `/events/:id`               | Update event (organizer)  | JWT        |
+| `PATCH` | `/events/:id/submit`        | Submit event untuk review | JWT        |
+| `GET`   | `/events/admin`             | Daftar event untuk admin  | JWT, ADMIN |
+| `GET`   | `/events/admin/:id`         | Detail event untuk admin  | JWT, ADMIN |
+| `PATCH` | `/events/admin/:id/approve` | Approve event (admin)     | JWT, ADMIN |
+| `PATCH` | `/events/admin/:id/reject`  | Reject event (admin)      | JWT, ADMIN |
 
 ## Script yang tersedia
 
