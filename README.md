@@ -241,7 +241,7 @@ Beberapa endpoint dilindungi dengan `JwtAuthGuard` dan role check via `RoleGuard
 
 Project ini masih dalam tahap pengembangan backend event ticketing. Fitur utama autentikasi, organizer, kategori, event, dan ticket type sudah tersedia, sementara fitur order, payment, refund, dan issued ticket masih berada pada tahap perencanaan/penyiapan integrasi lebih lanjut sesuai schema yang sudah dibuat.
 
-#60% Work Progress
+# 60% Work Progress
 
 ## Lisensi
 
