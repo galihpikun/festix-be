@@ -6,6 +6,7 @@ import {
   Param,
   Post,
   Put,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { TicketTypesService } from './ticket-types.service';
@@ -30,24 +31,28 @@ export class TicketTypesController {
   @UseGuards(JwtAuthGuard)
   @Post('event/:eventId')
   createTicketType(
+    @Req() req,
     @Body() dto: CreateTicketTypeDto,
     @Param('eventId') eventId: string,
   ) {
-    return this.ticketTypesService.createTicketType(dto, eventId);
+    return this.ticketTypesService.createTicketType(req.user.userId, dto, eventId,);
   }
 
   @UseGuards(JwtAuthGuard)
   @Put(':id')
   updateTicketType(
+    @Req() req,
     @Body() dto: UpdateTicketTypeDto,
     @Param('id') ticketTypeId: string,
   ) {
-    return this.ticketTypesService.updateTicketType(dto, ticketTypeId);
+    return this.ticketTypesService.updateTicketType(req.user.userId, dto, ticketTypeId);
   }
 
   @UseGuards(JwtAuthGuard)
   @Delete(':id')
-  deleteTicketType(@Param('id') ticketTypeId: string) {
-    return this.ticketTypesService.deleteTicketType(ticketTypeId);
+  deleteTicketType(
+    @Req() req,
+    @Param('id') ticketTypeId: string) {
+    return this.ticketTypesService.deleteTicketType(req.user.userId, ticketTypeId);
   }
 }

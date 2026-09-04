@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -42,29 +43,58 @@ export class TicketTypesService {
     return ticketType;
   }
 
-  async createTicketType(dto: CreateTicketTypeDto, eventId: string) {
+  async createTicketType(
+    userId: string,
+    dto: CreateTicketTypeDto,
+    eventId: string,
+  ) {
+    const event = await this.prisma.event.findUnique({
+      where: {
+        id: eventId,
+      },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
+    if (event.organizerId !== userId) {
+      throw new ForbiddenException('You are not the organizer of this event');
+    }
+
     const ticketType = await this.prisma.ticketType.create({
       data: {
         name: dto.name,
         price: dto.price,
         quota: dto.quota,
         availableQuota: dto.quota,
-        eventId: eventId,
+        eventId,
       },
     });
 
     return ticketType;
   }
 
-  async updateTicketType(dto: UpdateTicketTypeDto, ticketTypeId: string) {
+  async updateTicketType(
+    userId: string,
+    dto: UpdateTicketTypeDto,
+    ticketTypeId: string,
+  ) {
     const ticketType = await this.prisma.ticketType.findUnique({
       where: {
         id: ticketTypeId,
+      },
+      include: {
+        event: true,
       },
     });
 
     if (!ticketType) {
       throw new NotFoundException('Ticket type not found');
+    }
+
+    if (ticketType.event.organizerId !== userId) {
+      throw new ForbiddenException('You are not the organizer of this event');
     }
 
     const soldQuota = ticketType.quota - ticketType.availableQuota;
@@ -101,18 +131,23 @@ export class TicketTypesService {
     return updatedTicketType;
   }
 
-  async deleteTicketType(ticketTypeId: string) {
+  async deleteTicketType(userId: string, ticketTypeId: string) {
     const ticketType = await this.prisma.ticketType.findUnique({
       where: {
         id: ticketTypeId,
       },
       include: {
         orderItems: true,
+        event: true,
       },
     });
 
     if (!ticketType) {
       throw new NotFoundException('Ticket type not found');
+    }
+
+    if (ticketType.event.organizerId !== userId) {
+      throw new ForbiddenException('You are not the organizer of this event');
     }
 
     if (ticketType.orderItems.length > 0) {
