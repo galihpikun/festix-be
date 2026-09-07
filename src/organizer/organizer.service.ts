@@ -195,7 +195,6 @@ export class OrganizerService {
     };
   }
 
-
   async getMyOrganizerProfile(userId: string) {
     const organizer = await this.prisma.organizerProfile.findUnique({
       where: {
@@ -232,8 +231,6 @@ export class OrganizerService {
       },
     });
   }
-
-
 
   async getOrganizerDetail(organizerId: string) {
     const organizer = await this.prisma.organizerProfile.findUnique({

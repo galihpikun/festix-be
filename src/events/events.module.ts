@@ -6,8 +6,8 @@ import { EventsController } from './events.controller';
 import { CloudinaryModule } from 'src/cloudinary/cloudinary.module';
 
 @Module({
-    imports:[PrismaModule,AuthModule, CloudinaryModule],
-    providers:[EventsService],
-    controllers:[EventsController]
+  imports: [PrismaModule, AuthModule, CloudinaryModule],
+  providers: [EventsService],
+  controllers: [EventsController],
 })
 export class EventsModule {}

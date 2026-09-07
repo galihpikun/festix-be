@@ -9,6 +9,4 @@ import { AuthModule } from 'src/auth/auth.module';
   providers: [CategoriesService],
   controllers: [CategoriesController],
 })
-export class CategoriesModule {
-
-}
+export class CategoriesModule {}

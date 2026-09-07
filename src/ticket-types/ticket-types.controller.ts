@@ -35,7 +35,11 @@ export class TicketTypesController {
     @Body() dto: CreateTicketTypeDto,
     @Param('eventId') eventId: string,
   ) {
-    return this.ticketTypesService.createTicketType(req.user.userId, dto, eventId,);
+    return this.ticketTypesService.createTicketType(
+      req.user.userId,
+      dto,
+      eventId,
+    );
   }
 
   @UseGuards(JwtAuthGuard)
@@ -45,14 +49,19 @@ export class TicketTypesController {
     @Body() dto: UpdateTicketTypeDto,
     @Param('id') ticketTypeId: string,
   ) {
-    return this.ticketTypesService.updateTicketType(req.user.userId, dto, ticketTypeId);
+    return this.ticketTypesService.updateTicketType(
+      req.user.userId,
+      dto,
+      ticketTypeId,
+    );
   }
 
   @UseGuards(JwtAuthGuard)
   @Delete(':id')
-  deleteTicketType(
-    @Req() req,
-    @Param('id') ticketTypeId: string) {
-    return this.ticketTypesService.deleteTicketType(req.user.userId, ticketTypeId);
+  deleteTicketType(@Req() req, @Param('id') ticketTypeId: string) {
+    return this.ticketTypesService.deleteTicketType(
+      req.user.userId,
+      ticketTypeId,
+    );
   }
 }

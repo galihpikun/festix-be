@@ -9,9 +9,20 @@ import { OrganizerModule } from './organizer/organizer.module';
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { EventsModule } from './events/events.module';
 import { TicketTypesModule } from './ticket-types/ticket-types.module';
+import { PaymentsModule } from './payments/payments.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, MailModule, CategoriesModule, OrganizerModule, CloudinaryModule, EventsModule, TicketTypesModule],
+  imports: [
+    PrismaModule,
+    AuthModule,
+    MailModule,
+    CategoriesModule,
+    OrganizerModule,
+    CloudinaryModule,
+    EventsModule,
+    TicketTypesModule,
+    PaymentsModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })

@@ -30,7 +30,7 @@ export class AuthController {
   }
 
   @Post('forgot-password')
-  forgotPassword(@Body() dto: ForgotPassDto){
+  forgotPassword(@Body() dto: ForgotPassDto) {
     return this.authService.forgotPassword(dto);
   }
 
@@ -46,10 +46,10 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Get('me')
-  getMe(@Req() req:any) {
+  getMe(@Req() req: any) {
     return {
       message: 'You are authenticated',
-      data: req.user
+      data: req.user,
     };
   }
 }

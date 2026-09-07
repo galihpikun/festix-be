@@ -5,8 +5,8 @@ import { TicketTypesService } from './ticket-types.service';
 import { TicketTypesController } from './ticket-types.controller';
 
 @Module({
-    imports: [PrismaModule, AuthModule],
-    providers: [TicketTypesService],
-    controllers: [TicketTypesController]
+  imports: [PrismaModule, AuthModule],
+  providers: [TicketTypesService],
+  controllers: [TicketTypesController],
 })
 export class TicketTypesModule {}

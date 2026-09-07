@@ -199,121 +199,121 @@ export class AuthService {
   }
 
   async verifyForgotPassword(dto: VerifyForgotPassDto) {
-  const user = await this.prisma.user.findUnique({
-    where: {
-      email: dto.email,
-    },
-  });
-
-  if (!user) {
-    throw new UnauthorizedException('Email not Found');
-  }
-
-  const otp = await this.prisma.otp.findFirst({
-    where: {
-      userId: user.id,
-      identifier: user.email,
-      type: 'FORGOT_PASSWORD',
-      isUsed: false,
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-  });
-
-  if (!otp) {
-    throw new UnauthorizedException('Invalid Email or Code');
-  }
-
-  if (otp.expiresAt < new Date()) {
-    throw new UnauthorizedException(
-      'Verification Code Has Expired, please request a new one',
-    );
-  }
-
-  const isValid = await bcrypt.compare(dto.code, otp.code);
-
-  if (!isValid) {
-    throw new UnauthorizedException('Invalid OTP');
-  }
-
-  await this.prisma.otp.update({
-    where: {
-      id: otp.id,
-    },
-    data: {
-      verifiedAt: new Date(),
-    },
-  });
-
-  return {
-    message: 'OTP verified successfully',
-    email: user.email,
-  };
-}
-
-  async resetPassword(dto: ResetPasswordDto) {
-  const user = await this.prisma.user.findUnique({
-    where: {
-      email: dto.email,
-    },
-  });
-
-  if (!user) {
-    throw new UnauthorizedException('Email not Found');
-  }
-
-  const otp = await this.prisma.otp.findFirst({
-    where: {
-      userId: user.id,
-      identifier: user.email,
-      type: 'FORGOT_PASSWORD',
-      isUsed: false,
-      verifiedAt: {
-        not: null,
-      },
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-  });
-
-  if (!otp) {
-    throw new UnauthorizedException(
-      'Please verify the OTP before resetting your password',
-    );
-  }
-
-  if (otp.expiresAt < new Date()) {
-    throw new UnauthorizedException(
-      'Verification session has expired, please request a new OTP',
-    );
-  }
-
-  const hashedPassword = await bcrypt.hash(dto.password, 10);
-
-  await this.prisma.$transaction([
-    this.prisma.user.update({
+    const user = await this.prisma.user.findUnique({
       where: {
-        id: user.id,
+        email: dto.email,
       },
-      data: {
-        password: hashedPassword,
-      },
-    }),
+    });
 
-    this.prisma.otp.update({
+    if (!user) {
+      throw new UnauthorizedException('Email not Found');
+    }
+
+    const otp = await this.prisma.otp.findFirst({
+      where: {
+        userId: user.id,
+        identifier: user.email,
+        type: 'FORGOT_PASSWORD',
+        isUsed: false,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    if (!otp) {
+      throw new UnauthorizedException('Invalid Email or Code');
+    }
+
+    if (otp.expiresAt < new Date()) {
+      throw new UnauthorizedException(
+        'Verification Code Has Expired, please request a new one',
+      );
+    }
+
+    const isValid = await bcrypt.compare(dto.code, otp.code);
+
+    if (!isValid) {
+      throw new UnauthorizedException('Invalid OTP');
+    }
+
+    await this.prisma.otp.update({
       where: {
         id: otp.id,
       },
       data: {
-        isUsed: true,
+        verifiedAt: new Date(),
       },
-    }),
-  ]);
+    });
 
-  return {
-    message: 'Password reset successfully',
-  };
-}
+    return {
+      message: 'OTP verified successfully',
+      email: user.email,
+    };
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    const user = await this.prisma.user.findUnique({
+      where: {
+        email: dto.email,
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Email not Found');
+    }
+
+    const otp = await this.prisma.otp.findFirst({
+      where: {
+        userId: user.id,
+        identifier: user.email,
+        type: 'FORGOT_PASSWORD',
+        isUsed: false,
+        verifiedAt: {
+          not: null,
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    if (!otp) {
+      throw new UnauthorizedException(
+        'Please verify the OTP before resetting your password',
+      );
+    }
+
+    if (otp.expiresAt < new Date()) {
+      throw new UnauthorizedException(
+        'Verification session has expired, please request a new OTP',
+      );
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: {
+          id: user.id,
+        },
+        data: {
+          password: hashedPassword,
+        },
+      }),
+
+      this.prisma.otp.update({
+        where: {
+          id: otp.id,
+        },
+        data: {
+          isUsed: true,
+        },
+      }),
+    ]);
+
+    return {
+      message: 'Password reset successfully',
+    };
+  }
 }

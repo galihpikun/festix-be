@@ -6,8 +6,8 @@ import { OrganizerController } from './organizer.controller';
 import { CloudinaryModule } from 'src/cloudinary/cloudinary.module';
 
 @Module({
-imports: [PrismaModule, AuthModule, CloudinaryModule],
-providers:[OrganizerService],
-controllers:[OrganizerController]    
+  imports: [PrismaModule, AuthModule, CloudinaryModule],
+  providers: [OrganizerService],
+  controllers: [OrganizerController],
 })
 export class OrganizerModule {}
