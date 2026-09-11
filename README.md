@@ -39,6 +39,10 @@ Catatan: model database untuk order, refund, issued ticket, serta relasi staff e
 - [x] Validasi request menggunakan ValidationPipe
 - [x] Autentikasi JWT dan role-based access control
 - [x] CRUD ticket type per event
+- [x] Membuat order dengan reservasi quota ticket
+- [x] Melihat daftar dan detail order milik user
+- [x] Membuat payment session melalui Xendit
+- [x] Menerima webhook payment completed dan payment expired dari Xendit
 
 ## Stack teknologi
 
@@ -73,6 +77,8 @@ festix-be/
 │   ├── events/
 │   ├── mail/
 │   ├── organizer/
+│   ├── orders/
+│   ├── payments/
 │   ├── prisma/
 │   └── ticket-types/
 ├── test/
@@ -91,6 +97,8 @@ festix-be/
 - `src/categories` : manajemen kategori event
 - `src/events` : pembuatan event, update event, submit review, approval admin
 - `src/organizer` : pengajuan organizer, upload dokumen, review admin
+- `src/orders` : pembuatan order, reservasi quota ticket, dan riwayat order user
+- `src/payments` : pembuatan payment session Xendit dan webhook status pembayaran
 - `src/ticket-types` : CRUD tiket per event
 - `src/cloudinary` : upload media ke Cloudinary
 - `src/mail` : pengiriman email OTP dan notifikasi
@@ -108,6 +116,8 @@ MAIL_PASSWORD="your_email_app_password"
 CLOUDINARY_CLOUD_NAME="your_cloud_name"
 CLOUDINARY_API_KEY="your_api_key"
 CLOUDINARY_API_SECRET="your_api_secret"
+XENDIT_SECRET_KEY="your_xendit_secret_key"
+XENDIT_WEBHOOK_TOKEN="your_xendit_webhook_token"
 PORT=3000
 ```
 
@@ -226,6 +236,20 @@ http://localhost:3000
 | POST   | `/ticket-types/event/:eventId` | Tambah ticket type            | JWT  |
 | PUT    | `/ticket-types/:id`            | Update ticket type            | JWT  |
 | DELETE | `/ticket-types/:id`            | Hapus ticket type             | JWT  |
+
+### Orders
+
+| Method | Endpoint      | Deskripsi                         | Auth |
+| ------ | ------------- | --------------------------------- | ---- |
+| POST   | `/orders`     | Membuat order dan payment session | JWT  |
+| GET    | `/orders`     | Melihat daftar order milik user   | JWT  |
+| GET    | `/orders/:id` | Melihat detail order milik user   | JWT  |
+
+### Payments
+
+| Method | Endpoint            | Deskripsi                                 | Auth         |
+| ------ | ------------------- | ----------------------------------------- | ------------ |
+| POST   | `/payments/webhook` | Menerima webhook status pembayaran Xendit | Token Xendit |
 
 ## Role yang dipakai
 
