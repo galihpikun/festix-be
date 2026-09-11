@@ -10,6 +10,7 @@ import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { EventsModule } from './events/events.module';
 import { TicketTypesModule } from './ticket-types/ticket-types.module';
 import { PaymentsModule } from './payments/payments.module';
+import { OrdersModule } from './orders/orders.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { PaymentsModule } from './payments/payments.module';
     EventsModule,
     TicketTypesModule,
     PaymentsModule,
+    OrdersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
