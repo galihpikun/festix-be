@@ -18,7 +18,6 @@ import { categoryDto } from './dto/categories.dto';
 export class CategoriesController {
   constructor(private readonly catService: CategoriesService) {}
 
-  @UseGuards(JwtAuthGuard)
   @Get()
   getCategories() {
     return this.catService.getCategories();

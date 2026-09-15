@@ -39,6 +39,23 @@ export class EventsService {
     });
   }
 
+  async getMostPopularEvents() {
+    return await this.prisma.event.findMany({
+      where: {
+        status: 'PUBLISHED',
+      },
+      include: {
+        category: true,
+        ticketTypes: true,
+      },
+      orderBy: {
+        ticketTypes: {
+          _count: 'desc',
+        },
+      },
+    });
+  }
+
   async getAdminEvents() {
     return await this.prisma.event.findMany({
       include: {

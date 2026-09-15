@@ -41,6 +41,11 @@ export class EventsController {
     return this.eventsService.getEvents();
   }
 
+  @Get('most-popular')
+  getMostPop(){
+    return this.eventsService.getMostPopularEvents();
+  }
+
   // ==========================================
   // ADMIN
   // ==========================================
