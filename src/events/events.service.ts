@@ -451,7 +451,9 @@ export class EventsService {
     }
 
     if (event.ticketTypes.length === 0) {
-      throw new ConflictException('EVent Must atleast have one ticket type before approval');
+      throw new ConflictException(
+        'EVent Must atleast have one ticket type before approval',
+      );
     }
 
     if (event.status !== 'PENDING_REVIEW') {

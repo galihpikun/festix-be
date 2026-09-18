@@ -42,7 +42,7 @@ export class EventsController {
   }
 
   @Get('most-popular')
-  getMostPop(){
+  getMostPop() {
     return this.eventsService.getMostPopularEvents();
   }
 
