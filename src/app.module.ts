@@ -11,6 +11,8 @@ import { EventsModule } from './events/events.module';
 import { TicketTypesModule } from './ticket-types/ticket-types.module';
 import { PaymentsModule } from './payments/payments.module';
 import { OrdersModule } from './orders/orders.module';
+import { IssuedTicketsModule } from './issued-tickets/issued-tickets.module';
+import { TicketRedemptionModule } from './ticket-redemption/ticket-redemption.module';
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { OrdersModule } from './orders/orders.module';
     TicketTypesModule,
     PaymentsModule,
     OrdersModule,
+    IssuedTicketsModule,
+    TicketRedemptionModule,
   ],
   controllers: [AppController],
   providers: [AppService],

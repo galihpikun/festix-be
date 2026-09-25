@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Order, User } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { IssuedTicketsService } from '../issued-tickets/issued-tickets.service';
 
 type PaymentSessionResponse = {
   payment_session_id?: string;
@@ -38,7 +39,10 @@ type WebhookBody = {
 
 @Injectable()
 export class PaymentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly issuedTicketsService: IssuedTicketsService,
+  ) {}
 
   async createPaymentSession(order: Order, user: User) {
     const secretKey = process.env.XENDIT_SECRET_KEY;
@@ -135,17 +139,25 @@ export class PaymentsService {
 
     const paymentSessionId = this.getPaymentSessionId(body);
 
-    await this.prisma.order.updateMany({
-      where: {
-        id: order.id,
-        paymentStatus: 'PENDING',
-      },
-      data: {
-        paymentStatus: 'PAID',
-        ...(paymentSessionId && {
-          pgTransactionId: paymentSessionId,
-        }),
-      },
+    await this.prisma.$transaction(async (tx) => {
+      const updatedOrder = await tx.order.updateMany({
+        where: {
+          id: order.id,
+          paymentStatus: 'PENDING',
+        },
+        data: {
+          paymentStatus: 'PAID',
+          ...(paymentSessionId && {
+            pgTransactionId: paymentSessionId,
+          }),
+        },
+      });
+
+      if (updatedOrder.count === 0) {
+        return;
+      }
+
+      await this.issuedTicketsService.issueTicketsForOrder(order.id, tx);
     });
 
     return {
