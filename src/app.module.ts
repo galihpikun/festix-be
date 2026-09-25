@@ -13,6 +13,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { OrdersModule } from './orders/orders.module';
 import { IssuedTicketsModule } from './issued-tickets/issued-tickets.module';
 import { TicketRedemptionModule } from './ticket-redemption/ticket-redemption.module';
+import { AdminDashboardModule } from './admin-dashboard/admin-dashboard.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { TicketRedemptionModule } from './ticket-redemption/ticket-redemption.mo
     OrdersModule,
     IssuedTicketsModule,
     TicketRedemptionModule,
+    AdminDashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],
