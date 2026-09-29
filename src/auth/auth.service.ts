@@ -317,4 +317,8 @@ export class AuthService {
       message: 'Password reset successfully',
     };
   }
+
+  async getMe(userId)  {
+    
+  }
 }
