@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -144,6 +145,10 @@ export class AuthService {
 
     if (!user.emailVerified) {
       throw new UnauthorizedException('Email not Verified');
+    }
+
+    if (user.isSuspended) {
+      throw new ForbiddenException('Account suspended');
     }
 
     const isPasswordValid = await bcrypt.compare(dto.password, user.password);
@@ -318,7 +323,23 @@ export class AuthService {
     };
   }
 
-  async getMe(userId)  {
-    
+  async getMe(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        fullName: true,
+        avatar: true,
+        isSuspended: true,
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    return user;
   }
 }

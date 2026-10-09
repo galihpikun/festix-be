@@ -6,7 +6,11 @@ import {
 } from '@nestjs/common';
 import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { ApplyOrganizerDto } from './dto/apply-org';
+import { QueryOrganizersDto } from './dto/query-organizers.dto';
+import { buildPaginatedResponse } from '../shared/helpers/paginate';
+import { Prisma } from '../../generated/prisma/client';
 
 type UploadedFile = {
   buffer: Buffer;
@@ -20,6 +24,7 @@ export class OrganizerService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cloudinary: CloudinaryService,
+    private readonly auditLogs: AuditLogsService,
   ) {}
 
   async applyOrgs(
@@ -214,22 +219,49 @@ export class OrganizerService {
     return organizer;
   }
 
-  async getAllOrganizerApplications() {
-    return await this.prisma.organizerProfile.findMany({
-      include: {
-        user: {
-          select: {
-            id: true,
-            email: true,
-            fullName: true,
+  async getAllOrganizerApplications(query?: QueryOrganizersDto) {
+    const page = query?.page || 1;
+    const limit = query?.limit || 10;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.OrganizerProfileWhereInput = {};
+
+    if (query?.status) {
+      where.status = query.status;
+    }
+
+    if (query?.search) {
+      where.OR = [
+        { organizationName: { contains: query.search, mode: 'insensitive' } },
+        { user: { fullName: { contains: query.search, mode: 'insensitive' } } },
+        { user: { email: { contains: query.search, mode: 'insensitive' } } },
+      ];
+    }
+
+    const [organizers, total] = await Promise.all([
+      this.prisma.organizerProfile.findMany({
+        where,
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              fullName: true,
+              createdAt: true,
+            },
           },
+          documents: true,
         },
-        documents: true,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+        orderBy: {
+          createdAt: 'desc',
+        },
+        skip,
+        take: limit,
+      }),
+      this.prisma.organizerProfile.count({ where }),
+    ]);
+
+    return buildPaginatedResponse(organizers, total, page, limit);
   }
 
   async getOrganizerDetail(organizerId: string) {
@@ -243,6 +275,9 @@ export class OrganizerService {
             id: true,
             email: true,
             fullName: true,
+            createdAt: true,
+            emailVerified: true,
+            role: true,
           },
         },
         documents: true,
@@ -256,10 +291,97 @@ export class OrganizerService {
     return organizer;
   }
 
-  async approveOrganizer(organizerId: string) {
+  async approveDocument(documentId: string, actorId?: string) {
+    const doc = await this.prisma.organizerDocument.findUnique({
+      where: { id: documentId },
+    });
+
+    if (!doc) {
+      throw new NotFoundException('Document not found');
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.organizerDocument.update({
+        where: { id: documentId },
+        data: {
+          status: 'APPROVED',
+          rejectionReason: null,
+        },
+      });
+
+      await this.auditLogs.log(
+        actorId ?? null,
+        'APPROVE_DOCUMENT',
+        'OrganizerDocument',
+        documentId,
+        { type: doc.type, organizerId: doc.organizerId },
+        tx,
+      );
+
+      return result;
+    });
+
+    return {
+      message: 'Document approved successfully',
+      document: updated,
+    };
+  }
+
+  async rejectDocument(
+    documentId: string,
+    rejectionReason: string,
+    actorId?: string,
+  ) {
+    if (!rejectionReason || !rejectionReason.trim()) {
+      throw new BadRequestException('Rejection reason is required');
+    }
+
+    const doc = await this.prisma.organizerDocument.findUnique({
+      where: { id: documentId },
+    });
+
+    if (!doc) {
+      throw new NotFoundException('Document not found');
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.organizerDocument.update({
+        where: { id: documentId },
+        data: {
+          status: 'REJECTED',
+          rejectionReason: rejectionReason.trim(),
+        },
+      });
+
+      await this.auditLogs.log(
+        actorId ?? null,
+        'REJECT_DOCUMENT',
+        'OrganizerDocument',
+        documentId,
+        {
+          type: doc.type,
+          organizerId: doc.organizerId,
+          reason: rejectionReason.trim(),
+        },
+        tx,
+      );
+
+      return result;
+    });
+
+    return {
+      message: 'Document rejected successfully',
+      document: updated,
+    };
+  }
+
+  async approveOrganizer(organizerId: string, actorId?: string) {
     const organizer = await this.prisma.organizerProfile.findUnique({
       where: {
         id: organizerId,
+      },
+      include: {
+        documents: true,
       },
     });
 
@@ -275,14 +397,37 @@ export class OrganizerService {
       throw new ConflictException('Rejected application cannot be approved');
     }
 
-    const updatedOrganizer = await this.prisma.organizerProfile.update({
-      where: {
-        id: organizerId,
-      },
-      data: {
-        status: 'APPROVED',
-        rejectionReason: null,
-      },
+    // Require all documents to be APPROVED before approving the organizer
+    const unapprovedDocs = organizer.documents.filter(
+      (d) => d.status !== 'APPROVED',
+    );
+    if (unapprovedDocs.length > 0) {
+      throw new ConflictException(
+        `Cannot approve organizer. ${unapprovedDocs.length} document(s) have not been approved yet.`,
+      );
+    }
+
+    const updatedOrganizer = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.organizerProfile.update({
+        where: {
+          id: organizerId,
+        },
+        data: {
+          status: 'APPROVED',
+          rejectionReason: null,
+        },
+      });
+
+      await this.auditLogs.log(
+        actorId ?? null,
+        'APPROVE',
+        'OrganizerProfile',
+        organizerId,
+        { organizationName: organizer.organizationName },
+        tx,
+      );
+
+      return updated;
     });
 
     return {
@@ -291,7 +436,15 @@ export class OrganizerService {
     };
   }
 
-  async rejectOrganizer(organizerId: string, rejectionReason: string) {
+  async rejectOrganizer(
+    organizerId: string,
+    rejectionReason: string,
+    actorId?: string,
+  ) {
+    if (!rejectionReason || !rejectionReason.trim()) {
+      throw new BadRequestException('Rejection reason is required');
+    }
+
     const organizer = await this.prisma.organizerProfile.findUnique({
       where: {
         id: organizerId,
@@ -310,14 +463,30 @@ export class OrganizerService {
       throw new ConflictException('Organizer is already rejected');
     }
 
-    const updatedOrganizer = await this.prisma.organizerProfile.update({
-      where: {
-        id: organizerId,
-      },
-      data: {
-        status: 'REJECTED',
-        rejectionReason,
-      },
+    const updatedOrganizer = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.organizerProfile.update({
+        where: {
+          id: organizerId,
+        },
+        data: {
+          status: 'REJECTED',
+          rejectionReason: rejectionReason.trim(),
+        },
+      });
+
+      await this.auditLogs.log(
+        actorId ?? null,
+        'REJECT',
+        'OrganizerProfile',
+        organizerId,
+        {
+          organizationName: organizer.organizationName,
+          reason: rejectionReason.trim(),
+        },
+        tx,
+      );
+
+      return updated;
     });
 
     return {

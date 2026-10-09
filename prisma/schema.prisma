@@ -71,6 +71,9 @@ model User {
   avatar           String?
   role             Role              @default(USER)
   emailVerified    Boolean           @default(false) @map("email_verified")
+  isSuspended      Boolean           @default(false) @map("is_suspended")
+  suspendedAt      DateTime?         @map("suspended_at")
+  suspendReason    String?           @map("suspend_reason")
   createdAt        DateTime          @default(now()) @map("created_at")
   updatedAt        DateTime          @updatedAt @map("updated_at")
 
@@ -301,4 +304,20 @@ model Otp {
 
   @@index([identifier, type]) // Index untuk mempercepat query lookup saat verifikasi
   @@map("otps")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  actorId     String?  @map("actor_id")
+  action      String
+  entityType  String   @map("entity_type")
+  entityId    String?  @map("entity_id")
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([actorId])
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
 }

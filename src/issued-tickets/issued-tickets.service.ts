@@ -7,6 +7,8 @@ import {
 import { randomBytes } from 'crypto';
 import { IssuedTicket, Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { QueryAdminTicketsDto } from './dto/query-admin-tickets.dto';
+import { buildPaginatedResponse } from '../shared/helpers/paginate';
 
 @Injectable()
 export class IssuedTicketsService {
@@ -149,6 +151,136 @@ export class IssuedTicketsService {
 
     if (ticket.orderItem.order.userId !== userId) {
       throw new ForbiddenException('You do not have access to this ticket');
+    }
+
+    return ticket;
+  }
+
+  async getAdminTickets(query?: QueryAdminTicketsDto) {
+    const page = query?.page || 1;
+    const limit = query?.limit || 10;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.IssuedTicketWhereInput = {};
+
+    if (query?.isRedeemed !== undefined) {
+      where.isRedeemed = query.isRedeemed === 'true';
+    }
+
+    if (query?.isCancelled !== undefined) {
+      where.isCancelled = query.isCancelled === 'true';
+    }
+
+    if (query?.eventId) {
+      where.orderItem = {
+        ticketType: {
+          eventId: query.eventId,
+        },
+      };
+    }
+
+    if (query?.search) {
+      where.OR = [
+        { ticketCode: { contains: query.search, mode: 'insensitive' } },
+        {
+          orderItem: {
+            order: {
+              OR: [
+                { orderNumber: { contains: query.search, mode: 'insensitive' } },
+                {
+                  user: {
+                    fullName: { contains: query.search, mode: 'insensitive' },
+                  },
+                },
+              ],
+            },
+          },
+        },
+      ];
+    }
+
+    const [tickets, total] = await Promise.all([
+      this.prisma.issuedTicket.findMany({
+        where,
+        include: {
+          orderItem: {
+            include: {
+              ticketType: {
+                include: {
+                  event: {
+                    select: {
+                      id: true,
+                      title: true,
+                    },
+                  },
+                },
+              },
+              order: {
+                select: {
+                  id: true,
+                  orderNumber: true,
+                  paymentStatus: true,
+                  user: {
+                    select: {
+                      id: true,
+                      fullName: true,
+                      email: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+        skip,
+        take: limit,
+      }),
+      this.prisma.issuedTicket.count({ where }),
+    ]);
+
+    return buildPaginatedResponse(tickets, total, page, limit);
+  }
+
+  async getAdminTicketDetail(ticketId: string) {
+    const ticket = await this.prisma.issuedTicket.findUnique({
+      where: { id: ticketId },
+      include: {
+        orderItem: {
+          include: {
+            ticketType: {
+              include: {
+                event: {
+                  select: {
+                    id: true,
+                    title: true,
+                    location: true,
+                    startDatetime: true,
+                    endDatetime: true,
+                  },
+                },
+              },
+            },
+            order: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    fullName: true,
+                    email: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!ticket) {
+      throw new NotFoundException('Ticket not found');
     }
 
     return ticket;

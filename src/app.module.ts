@@ -14,6 +14,9 @@ import { OrdersModule } from './orders/orders.module';
 import { IssuedTicketsModule } from './issued-tickets/issued-tickets.module';
 import { TicketRedemptionModule } from './ticket-redemption/ticket-redemption.module';
 import { AdminDashboardModule } from './admin-dashboard/admin-dashboard.module';
+import { AuditLogsModule } from './audit-logs/audit-logs.module';
+import { UsersModule } from './users/users.module';
+import { StaffModule } from './staff/staff.module';
 
 @Module({
   imports: [
@@ -30,6 +33,9 @@ import { AdminDashboardModule } from './admin-dashboard/admin-dashboard.module';
     IssuedTicketsModule,
     TicketRedemptionModule,
     AdminDashboardModule,
+    AuditLogsModule,
+    UsersModule,
+    StaffModule,
   ],
   controllers: [AppController],
   providers: [AppService],

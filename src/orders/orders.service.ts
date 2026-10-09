@@ -9,6 +9,9 @@ import { randomBytes } from 'crypto';
 import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { QueryAdminOrdersDto } from './dto/query-admin-orders.dto';
+import { buildPaginatedResponse } from '../shared/helpers/paginate';
+import { Prisma } from '../../generated/prisma/client';
 
 @Injectable()
 export class OrdersService {
@@ -197,6 +200,121 @@ export class OrdersService {
 
     if (order.userId !== userId) {
       throw new ForbiddenException('You do not have access to this order');
+    }
+
+    return order;
+  }
+
+  async getAdminOrders(query?: QueryAdminOrdersDto) {
+    const page = query?.page || 1;
+    const limit = query?.limit || 10;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.OrderWhereInput = {};
+
+    if (query?.status) {
+      where.paymentStatus = query.status;
+    }
+
+    if (query?.search) {
+      where.OR = [
+        { orderNumber: { contains: query.search, mode: 'insensitive' } },
+        { user: { fullName: { contains: query.search, mode: 'insensitive' } } },
+        { user: { email: { contains: query.search, mode: 'insensitive' } } },
+      ];
+    }
+
+    if (query?.dateFrom || query?.dateTo) {
+      where.createdAt = {};
+      if (query.dateFrom) {
+        where.createdAt.gte = new Date(query.dateFrom);
+      }
+      if (query.dateTo) {
+        where.createdAt.lte = new Date(query.dateTo);
+      }
+    }
+
+    const [orders, total] = await Promise.all([
+      this.prisma.order.findMany({
+        where,
+        include: {
+          user: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+            },
+          },
+          orderItems: {
+            include: {
+              ticketType: {
+                include: {
+                  event: {
+                    select: {
+                      id: true,
+                      title: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+        skip,
+        take: limit,
+      }),
+      this.prisma.order.count({ where }),
+    ]);
+
+    return buildPaginatedResponse(orders, total, page, limit);
+  }
+
+  async getAdminOrderDetail(orderId: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+          },
+        },
+        orderItems: {
+          include: {
+            ticketType: {
+              include: {
+                event: {
+                  select: {
+                    id: true,
+                    title: true,
+                    location: true,
+                    startDatetime: true,
+                    endDatetime: true,
+                  },
+                },
+              },
+            },
+            issuedTickets: {
+              select: {
+                id: true,
+                ticketCode: true,
+                isRedeemed: true,
+                isCancelled: true,
+                redeemedAt: true,
+                createdAt: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
     }
 
     return order;

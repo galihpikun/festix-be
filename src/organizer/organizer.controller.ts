@@ -5,6 +5,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   UploadedFiles,
   UseGuards,
@@ -13,9 +14,11 @@ import {
 import { OrganizerService } from './organizer.service';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ApplyOrganizerDto } from './dto/apply-org';
-import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
-import { RoleGuard } from 'src/auth/guards/role.guard';
-import { Roles } from 'src/auth/decorators/role.decorator';
+import { QueryOrganizersDto } from './dto/query-organizers.dto';
+import { RejectDocumentDto } from './dto/reject-document.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RoleGuard } from '../auth/guards/role.guard';
+import { Roles } from '../auth/decorators/role.decorator';
 
 type UploadedFile = {
   buffer: Buffer;
@@ -51,7 +54,7 @@ export class OrganizerController {
     ]),
   )
   applyOrganizer(
-    @Req() req,
+    @Req() req: any,
     @Body() dto: ApplyOrganizerDto,
     @UploadedFiles()
     files: {
@@ -67,7 +70,7 @@ export class OrganizerController {
   // Get My Organizer Profile
   @UseGuards(JwtAuthGuard)
   @Get('me')
-  getMyOrg(@Req() req) {
+  getMyOrg(@Req() req: any) {
     return this.organizerService.getMyOrganizerProfile(req.user.userId);
   }
 
@@ -77,8 +80,31 @@ export class OrganizerController {
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles('ADMIN')
   @Get('admin')
-  getAllOrgs() {
-    return this.organizerService.getAllOrganizerApplications();
+  getAllOrgs(@Query() query: QueryOrganizersDto) {
+    return this.organizerService.getAllOrganizerApplications(query);
+  }
+
+  // Document actions (before :id to avoid route collision)
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles('ADMIN')
+  @Patch('admin/documents/:docId/approve')
+  approveDocument(@Req() req: any, @Param('docId') docId: string) {
+    return this.organizerService.approveDocument(docId, req.user?.userId);
+  }
+
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles('ADMIN')
+  @Patch('admin/documents/:docId/reject')
+  rejectDocument(
+    @Req() req: any,
+    @Param('docId') docId: string,
+    @Body() dto: RejectDocumentDto,
+  ) {
+    return this.organizerService.rejectDocument(
+      docId,
+      dto.rejectionReason,
+      req.user?.userId,
+    );
   }
 
   // Get Organizer Detail
@@ -93,8 +119,11 @@ export class OrganizerController {
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles('ADMIN')
   @Patch('admin/:id/approve')
-  approve(@Param('id') organizerId: string) {
-    return this.organizerService.approveOrganizer(organizerId);
+  approve(@Req() req: any, @Param('id') organizerId: string) {
+    return this.organizerService.approveOrganizer(
+      organizerId,
+      req.user?.userId,
+    );
   }
 
   // Reject Organizer
@@ -102,9 +131,14 @@ export class OrganizerController {
   @Roles('ADMIN')
   @Patch('admin/:id/reject')
   reject(
+    @Req() req: any,
     @Param('id') organizerId: string,
     @Body('rejectionReason') rejectionReason: string,
   ) {
-    return this.organizerService.rejectOrganizer(organizerId, rejectionReason);
+    return this.organizerService.rejectOrganizer(
+      organizerId,
+      rejectionReason,
+      req.user?.userId,
+    );
   }
 }

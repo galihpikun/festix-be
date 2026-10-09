@@ -5,6 +5,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   UploadedFiles,
   UseGuards,
@@ -16,6 +17,7 @@ import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { EventsService } from './events.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
+import { QueryAdminEventsDto } from './dto/query-admin-events.dto';
 
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RoleGuard } from 'src/auth/guards/role.guard';
@@ -56,8 +58,8 @@ export class EventsController {
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles('ADMIN')
   @Get('admin')
-  getAdminEvents() {
-    return this.eventsService.getAdminEvents();
+  getAdminEvents(@Query() query: QueryAdminEventsDto) {
+    return this.eventsService.getAdminEvents(query);
   }
 
   @UseGuards(JwtAuthGuard, RoleGuard)
@@ -152,13 +154,29 @@ export class EventsController {
   @UseGuards(JwtAuthGuard, RoleGuard)
   @Roles('ADMIN')
   @Patch('admin/:id/approve')
-  approveEvent(@Param('id') eventId: string) {
-    return this.eventsService.approveEvent(eventId);
+  approveEvent(@Req() req: any, @Param('id') eventId: string) {
+    return this.eventsService.approveEvent(eventId, req.user?.userId);
   }
 
   @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles('ADMIN')
   @Patch('admin/:id/reject')
-  rejectEvent(@Param('id') eventId: string, @Body('reason') reason: string) {
-    return this.eventsService.rejectEvent(eventId, reason);
+  rejectEvent(
+    @Req() req: any,
+    @Param('id') eventId: string,
+    @Body('reason') reason: string,
+  ) {
+    return this.eventsService.rejectEvent(eventId, reason, req.user?.userId);
+  }
+
+  @UseGuards(JwtAuthGuard, RoleGuard)
+  @Roles('ADMIN')
+  @Patch('admin/:id/cancel')
+  cancelEvent(
+    @Req() req: any,
+    @Param('id') eventId: string,
+    @Body('reason') reason: string,
+  ) {
+    return this.eventsService.cancelEvent(eventId, reason, req.user?.userId);
   }
 }

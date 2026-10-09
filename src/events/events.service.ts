@@ -7,8 +7,12 @@ import {
 } from '@nestjs/common';
 import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
+import { QueryAdminEventsDto } from './dto/query-admin-events.dto';
+import { buildPaginatedResponse } from '../shared/helpers/paginate';
+import { Prisma } from '../../generated/prisma/client';
 
 type UploadedFile = {
   buffer: Buffer;
@@ -22,6 +26,7 @@ export class EventsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cloudinary: CloudinaryService,
+    private readonly auditLogs: AuditLogsService,
   ) {}
 
   async getEvents() {
@@ -56,30 +61,59 @@ export class EventsService {
     });
   }
 
-  async getAdminEvents() {
-    return await this.prisma.event.findMany({
-      include: {
-        category: true,
-        organizer: {
-          select: {
-            id: true,
-            email: true,
-            fullName: true,
-            organizerProfile: {
-              select: {
-                id: true,
-                organizationName: true,
-                status: true,
+  async getAdminEvents(query?: QueryAdminEventsDto) {
+    const page = query?.page || 1;
+    const limit = query?.limit || 10;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.EventWhereInput = {};
+
+    if (query?.status) {
+      where.status = query.status;
+    }
+
+    if (query?.categoryId) {
+      where.categoryId = query.categoryId;
+    }
+
+    if (query?.search) {
+      where.OR = [
+        { title: { contains: query.search, mode: 'insensitive' } },
+        { location: { contains: query.search, mode: 'insensitive' } },
+      ];
+    }
+
+    const [events, total] = await Promise.all([
+      this.prisma.event.findMany({
+        where,
+        include: {
+          category: true,
+          organizer: {
+            select: {
+              id: true,
+              email: true,
+              fullName: true,
+              organizerProfile: {
+                select: {
+                  id: true,
+                  organizationName: true,
+                  status: true,
+                },
               },
             },
           },
+          ticketTypes: true,
         },
-        ticketTypes: true,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+        orderBy: {
+          createdAt: 'desc',
+        },
+        skip,
+        take: limit,
+      }),
+      this.prisma.event.count({ where }),
+    ]);
+
+    return buildPaginatedResponse(events, total, page, limit);
   }
 
   async eventDetail(id: string) {
@@ -424,7 +458,7 @@ export class EventsService {
     };
   }
 
-  async approveEvent(eventId: string) {
+  async approveEvent(eventId: string, actorId?: string) {
     const event = await this.prisma.event.findUnique({
       where: {
         id: eventId,
@@ -460,14 +494,27 @@ export class EventsService {
       throw new ConflictException('Only events pending review can be approved');
     }
 
-    const updatedEvent = await this.prisma.event.update({
-      where: {
-        id: eventId,
-      },
-      data: {
-        status: 'PUBLISHED',
-        rejectionReason: null,
-      },
+    const updatedEvent = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.event.update({
+        where: {
+          id: eventId,
+        },
+        data: {
+          status: 'PUBLISHED',
+          rejectionReason: null,
+        },
+      });
+
+      await this.auditLogs.log(
+        actorId ?? null,
+        'APPROVE',
+        'Event',
+        eventId,
+        { title: event.title, previousStatus: event.status },
+        tx,
+      );
+
+      return updated;
     });
 
     return {
@@ -476,7 +523,7 @@ export class EventsService {
     };
   }
 
-  async rejectEvent(eventId: string, reason: string) {
+  async rejectEvent(eventId: string, reason: string, actorId?: string) {
     if (!reason || !reason.trim()) {
       throw new BadRequestException('Rejection reason is required');
     }
@@ -495,18 +542,101 @@ export class EventsService {
       throw new ConflictException('Only events pending review can be rejected');
     }
 
-    const updatedEvent = await this.prisma.event.update({
-      where: {
-        id: eventId,
-      },
-      data: {
-        status: 'REJECTED',
-        rejectionReason: reason.trim(),
-      },
+    const updatedEvent = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.event.update({
+        where: {
+          id: eventId,
+        },
+        data: {
+          status: 'REJECTED',
+          rejectionReason: reason.trim(),
+        },
+      });
+
+      await this.auditLogs.log(
+        actorId ?? null,
+        'REJECT',
+        'Event',
+        eventId,
+        { title: event.title, reason: reason.trim() },
+        tx,
+      );
+
+      return updated;
     });
 
     return {
       message: 'Event rejected successfully',
+      event: updatedEvent,
+    };
+  }
+
+  async cancelEvent(eventId: string, reason: string, actorId?: string) {
+    if (!reason || !reason.trim()) {
+      throw new BadRequestException('Cancellation reason is required');
+    }
+
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        ticketTypes: {
+          include: {
+            orderItems: {
+              include: {
+                order: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
+    if (event.status !== 'PUBLISHED' && event.status !== 'PENDING_REVIEW') {
+      throw new ConflictException(
+        'Only published or pending review events can be cancelled',
+      );
+    }
+
+    // Check if there are any PAID orders associated with this event
+    const paidOrders = event.ticketTypes.flatMap((tt) =>
+      tt.orderItems
+        .filter((oi) => oi.order.paymentStatus === 'PAID')
+        .map((oi) => oi.order),
+    );
+
+    if (paidOrders.length > 0) {
+      throw new ConflictException(
+        `Cannot cancel event with ${paidOrders.length} existing paid order(s). Refund operations are required first.`,
+      );
+    }
+
+    const updatedEvent = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.event.update({
+        where: { id: eventId },
+        data: {
+          status: 'CANCELLED',
+          rejectionReason: reason.trim(),
+        },
+      });
+
+      await this.auditLogs.log(
+        actorId ?? null,
+        'CANCEL',
+        'Event',
+        eventId,
+        { title: event.title, reason: reason.trim(), previousStatus: event.status },
+        tx,
+      );
+
+      return updated;
+    });
+
+    return {
+      message: 'Event cancelled successfully',
       event: updatedEvent,
     };
   }
