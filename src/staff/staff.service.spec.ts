@@ -2,7 +2,12 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { StaffService } from './staff.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
-import { ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  ConflictException,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { Role } from '../../generated/prisma/client';
 
 describe('StaffService', () => {
@@ -21,9 +26,14 @@ describe('StaffService', () => {
         findUnique: jest.fn(),
       },
       eventStaff: {
+        findMany: jest.fn(),
         findUnique: jest.fn(),
         create: jest.fn(),
         delete: jest.fn(),
+      },
+      issuedTicket: {
+        count: jest.fn(),
+        findMany: jest.fn(),
       },
       $transaction: jest.fn((cb) => cb(prisma)),
     };
@@ -122,6 +132,133 @@ describe('StaffService', () => {
         expect.any(Object),
         expect.anything(),
       );
+    });
+  });
+
+  describe('getAssignedEvents', () => {
+    it('should return empty list when staff has no assigned events', async () => {
+      prisma.eventStaff.findMany.mockResolvedValue([]);
+
+      const result = await service.getAssignedEvents('staff-1');
+
+      expect(result).toEqual([]);
+      expect(prisma.issuedTicket.count).not.toHaveBeenCalled();
+    });
+
+    it('should return only assigned events with participant summary and active state', async () => {
+      const now = Date.now();
+      const startDatetime = new Date(now - 3600000);
+      const endDatetime = new Date(now + 3600000);
+
+      prisma.eventStaff.findMany.mockResolvedValue([
+        {
+          id: 'es-1',
+          userId: 'staff-1',
+          createdAt: new Date(),
+          event: {
+            id: 'event-1',
+            title: 'Assigned Fest',
+            coverImageUrl: 'https://example.com/cover.jpg',
+            status: 'PUBLISHED',
+            location: 'Gelora Bung Karno',
+            startDatetime,
+            endDatetime,
+          },
+        },
+      ]);
+
+      prisma.issuedTicket.count
+        .mockResolvedValueOnce(150)
+        .mockResolvedValueOnce(50);
+
+      const result = await service.getAssignedEvents('staff-1');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('event-1');
+      expect(result[0].title).toBe('Assigned Fest');
+      expect(result[0].isActive).toBe(true);
+      expect(result[0].participantSummary).toEqual({
+        totalParticipants: 150,
+        totalRedeemed: 50,
+      });
+    });
+  });
+
+  describe('getEventDashboard', () => {
+    const eventId = 'event-1';
+    const staffId = 'staff-1';
+    const startDatetime = new Date(Date.now() - 3600000);
+    const endDatetime = new Date(Date.now() + 3600000);
+
+    const mockEvent = {
+      id: eventId,
+      title: 'Assigned Fest',
+      location: 'Gelora Bung Karno',
+      status: 'PUBLISHED',
+      startDatetime,
+      endDatetime,
+    };
+
+    it('should throw NotFoundException when event does not exist', async () => {
+      prisma.event.findUnique.mockResolvedValue(null);
+
+      await expect(service.getEventDashboard(staffId, eventId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should throw ForbiddenException when staff is not assigned to event', async () => {
+      prisma.event.findUnique.mockResolvedValue(mockEvent);
+      prisma.eventStaff.findUnique.mockResolvedValue(null);
+
+      await expect(service.getEventDashboard(staffId, eventId)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('should return aggregated participant statistics, active state, and recent redemptions', async () => {
+      prisma.event.findUnique.mockResolvedValue(mockEvent);
+      prisma.eventStaff.findUnique.mockResolvedValue({
+        eventId,
+        userId: staffId,
+      });
+
+      prisma.issuedTicket.count
+        .mockResolvedValueOnce(200)
+        .mockResolvedValueOnce(150);
+
+      const redeemedAt = new Date();
+      prisma.issuedTicket.findMany.mockResolvedValue([
+        {
+          id: 'ticket-1',
+          ticketCode: 'TCK-REC-1',
+          redeemedAt,
+          orderItem: {
+            ticketType: { name: 'VIP' },
+            order: { user: { fullName: 'Alice' } },
+          },
+        },
+      ]);
+
+      const result = await service.getEventDashboard(staffId, eventId);
+
+      expect(result.event.id).toBe(eventId);
+      expect(result.event.isActive).toBe(true);
+      expect(result.statistics).toEqual({
+        totalParticipants: 200,
+        totalRedeemed: 150,
+        remainingTickets: 50,
+        redemptionRate: 75,
+      });
+      expect(result.recentRedemptions).toEqual([
+        {
+          id: 'ticket-1',
+          ticketCode: 'TCK-REC-1',
+          ticketType: 'VIP',
+          buyerName: 'Alice',
+          redeemedAt,
+        },
+      ]);
     });
   });
 });

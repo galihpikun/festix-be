@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -31,7 +32,9 @@ export class TicketRedemptionService {
               },
             },
             order: {
-              include: {
+              select: {
+                orderNumber: true,
+                paymentStatus: true,
                 user: {
                   select: {
                     id: true,
@@ -77,9 +80,14 @@ export class TicketRedemptionService {
       event: {
         id: event.id,
         title: event.title,
+        status: event.status,
         location: event.location,
         startDatetime: event.startDatetime,
         endDatetime: event.endDatetime,
+      },
+      order: {
+        orderNumber: ticket.orderItem.order.orderNumber,
+        paymentStatus: ticket.orderItem.order.paymentStatus,
       },
       owner: ticket.orderItem.order.user,
     };
@@ -94,8 +102,24 @@ export class TicketRedemptionService {
         include: {
           orderItem: {
             include: {
-              ticketType: true,
-              order: true,
+              ticketType: {
+                include: {
+                  event: true,
+                },
+              },
+              order: {
+                select: {
+                  orderNumber: true,
+                  paymentStatus: true,
+                  user: {
+                    select: {
+                      id: true,
+                      fullName: true,
+                      email: true,
+                    },
+                  },
+                },
+              },
             },
           },
         },
@@ -109,12 +133,12 @@ export class TicketRedemptionService {
         throw new NotFoundException('Ticket not found');
       }
 
-      const eventId = ticket.orderItem.ticketType.eventId;
+      const event = ticket.orderItem.ticketType.event;
 
       const staffAssignment = await tx.eventStaff.findUnique({
         where: {
           eventId_userId: {
-            eventId,
+            eventId: event.id,
             userId,
           },
         },
@@ -122,6 +146,19 @@ export class TicketRedemptionService {
 
       if (!staffAssignment) {
         throw new ForbiddenException('You are not assigned to this event');
+      }
+
+      if (event.status !== 'PUBLISHED') {
+        throw new BadRequestException(
+          'Redemption is only allowed for published events',
+        );
+      }
+
+      const now = new Date();
+      if (now < event.startDatetime || now > event.endDatetime) {
+        throw new BadRequestException(
+          'Redemption is only allowed during the event schedule',
+        );
       }
 
       if (ticket.isCancelled) {
@@ -140,7 +177,7 @@ export class TicketRedemptionService {
         },
         data: {
           isRedeemed: true,
-          redeemedAt: new Date(),
+          redeemedAt: now,
         },
       });
 
@@ -148,24 +185,32 @@ export class TicketRedemptionService {
         throw new ConflictException('Ticket has already been redeemed');
       }
 
-      const redeemedTicket = await tx.issuedTicket.findUnique({
-        where: { id: ticket.id },
-        include: {
-          orderItem: {
-            include: {
-              ticketType: {
-                include: {
-                  event: true,
-                },
-              },
-            },
-          },
-        },
-      });
-
       return {
         message: 'Ticket redeemed successfully',
-        ticket: redeemedTicket,
+        ticket: {
+          id: ticket.id,
+          ticketCode: ticket.ticketCode,
+          isRedeemed: true,
+          redeemedAt: now,
+          ticketType: {
+            id: ticket.orderItem.ticketType.id,
+            name: ticket.orderItem.ticketType.name,
+            price: ticket.orderItem.ticketType.price,
+          },
+          event: {
+            id: event.id,
+            title: event.title,
+            status: event.status,
+            location: event.location,
+            startDatetime: event.startDatetime,
+            endDatetime: event.endDatetime,
+          },
+          order: {
+            orderNumber: ticket.orderItem.order.orderNumber,
+            paymentStatus: ticket.orderItem.order.paymentStatus,
+          },
+          owner: ticket.orderItem.order.user,
+        },
       };
     });
   }

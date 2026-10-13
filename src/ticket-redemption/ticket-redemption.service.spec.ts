@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   NotFoundException,
@@ -46,6 +47,9 @@ describe('TicketRedemptionService', () => {
   const staffUserId = 'staff-user-1';
   const dto = { ticketCode: 'TCK-ABCD-1234ABCD' };
 
+  const startDatetime = new Date(Date.now() - 3600000);
+  const endDatetime = new Date(Date.now() + 3600000);
+
   const mockTicketWithStaff = {
     id: 'ticket-1',
     ticketCode: 'TCK-ABCD-1234ABCD',
@@ -62,13 +66,15 @@ describe('TicketRedemptionService', () => {
         event: {
           id: 'event-1',
           title: 'Test Event',
+          status: 'PUBLISHED',
           location: 'Jakarta',
-          startDatetime: new Date(),
-          endDatetime: new Date(),
+          startDatetime,
+          endDatetime,
           staffs: [{ userId: staffUserId, eventId: 'event-1' }],
         },
       },
       order: {
+        orderNumber: 'ORD-123456',
         paymentStatus: 'PAID',
         user: {
           id: 'user-1',
@@ -87,6 +93,9 @@ describe('TicketRedemptionService', () => {
 
       expect(result.ticketCode).toBe('TCK-ABCD-1234ABCD');
       expect(result.event.id).toBe('event-1');
+      expect(result.event.status).toBe('PUBLISHED');
+      expect(result.order.orderNumber).toBe('ORD-123456');
+      expect(result.order.paymentStatus).toBe('PAID');
       expect(result.owner.fullName).toBe('John Doe');
     });
 
@@ -145,22 +154,33 @@ describe('TicketRedemptionService', () => {
       redeemedAt: null,
       orderItem: {
         ticketType: {
+          id: 'tt-1',
+          name: 'VIP',
+          price: 100000,
           eventId: 'event-1',
+          event: {
+            id: 'event-1',
+            title: 'Test Event',
+            status: 'PUBLISHED',
+            location: 'Jakarta',
+            startDatetime,
+            endDatetime,
+          },
         },
         order: {
+          orderNumber: 'ORD-123456',
           paymentStatus: 'PAID',
+          user: {
+            id: 'user-1',
+            fullName: 'John Doe',
+            email: 'john@example.com',
+          },
         },
       },
     };
 
     it('should redeem a valid ticket successfully', async () => {
-      mockPrisma.issuedTicket.findUnique
-        .mockResolvedValueOnce(mockTicketForRedeem)
-        .mockResolvedValueOnce({
-          ...mockTicketForRedeem,
-          isRedeemed: true,
-          redeemedAt: new Date(),
-        });
+      mockPrisma.issuedTicket.findUnique.mockResolvedValue(mockTicketForRedeem);
       mockPrisma.eventStaff.findUnique.mockResolvedValue({
         eventId: 'event-1',
         userId: staffUserId,
@@ -170,6 +190,10 @@ describe('TicketRedemptionService', () => {
       const result = await service.redeemTicket(staffUserId, dto);
 
       expect(result.message).toBe('Ticket redeemed successfully');
+      expect(result.ticket.id).toBe('ticket-1');
+      expect(result.ticket.isRedeemed).toBe(true);
+      expect(result.ticket.event.id).toBe('event-1');
+      expect(result.ticket.order.orderNumber).toBe('ORD-123456');
       expect(mockPrisma.issuedTicket.updateMany).toHaveBeenCalledWith({
         where: {
           id: 'ticket-1',
@@ -196,7 +220,10 @@ describe('TicketRedemptionService', () => {
         ...mockTicketForRedeem,
         orderItem: {
           ...mockTicketForRedeem.orderItem,
-          order: { paymentStatus: 'PENDING' },
+          order: {
+            ...mockTicketForRedeem.orderItem.order,
+            paymentStatus: 'PENDING',
+          },
         },
       });
 
@@ -211,6 +238,80 @@ describe('TicketRedemptionService', () => {
 
       await expect(service.redeemTicket(staffUserId, dto)).rejects.toThrow(
         ForbiddenException,
+      );
+    });
+
+    it('should throw BadRequestException if event is not published', async () => {
+      mockPrisma.issuedTicket.findUnique.mockResolvedValue({
+        ...mockTicketForRedeem,
+        orderItem: {
+          ...mockTicketForRedeem.orderItem,
+          ticketType: {
+            ...mockTicketForRedeem.orderItem.ticketType,
+            event: {
+              ...mockTicketForRedeem.orderItem.ticketType.event,
+              status: 'DRAFT',
+            },
+          },
+        },
+      });
+      mockPrisma.eventStaff.findUnique.mockResolvedValue({
+        eventId: 'event-1',
+        userId: staffUserId,
+      });
+
+      await expect(service.redeemTicket(staffUserId, dto)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should throw BadRequestException if event has not started yet', async () => {
+      mockPrisma.issuedTicket.findUnique.mockResolvedValue({
+        ...mockTicketForRedeem,
+        orderItem: {
+          ...mockTicketForRedeem.orderItem,
+          ticketType: {
+            ...mockTicketForRedeem.orderItem.ticketType,
+            event: {
+              ...mockTicketForRedeem.orderItem.ticketType.event,
+              startDatetime: new Date(Date.now() + 3600000),
+              endDatetime: new Date(Date.now() + 7200000),
+            },
+          },
+        },
+      });
+      mockPrisma.eventStaff.findUnique.mockResolvedValue({
+        eventId: 'event-1',
+        userId: staffUserId,
+      });
+
+      await expect(service.redeemTicket(staffUserId, dto)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should throw BadRequestException if event has already ended', async () => {
+      mockPrisma.issuedTicket.findUnique.mockResolvedValue({
+        ...mockTicketForRedeem,
+        orderItem: {
+          ...mockTicketForRedeem.orderItem,
+          ticketType: {
+            ...mockTicketForRedeem.orderItem.ticketType,
+            event: {
+              ...mockTicketForRedeem.orderItem.ticketType.event,
+              startDatetime: new Date(Date.now() - 7200000),
+              endDatetime: new Date(Date.now() - 3600000),
+            },
+          },
+        },
+      });
+      mockPrisma.eventStaff.findUnique.mockResolvedValue({
+        eventId: 'event-1',
+        userId: staffUserId,
+      });
+
+      await expect(service.redeemTicket(staffUserId, dto)).rejects.toThrow(
+        BadRequestException,
       );
     });
 

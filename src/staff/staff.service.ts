@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
@@ -17,6 +18,223 @@ export class StaffService {
     private readonly prisma: PrismaService,
     private readonly auditLogs: AuditLogsService,
   ) {}
+
+  async getAssignedEvents(userId: string) {
+    const assignments = await this.prisma.eventStaff.findMany({
+      where: { userId },
+      include: {
+        event: {
+          select: {
+            id: true,
+            title: true,
+            coverImageUrl: true,
+            status: true,
+            location: true,
+            startDatetime: true,
+            endDatetime: true,
+          },
+        },
+      },
+      orderBy: {
+        event: {
+          startDatetime: 'asc',
+        },
+      },
+    });
+
+    const eventIds = assignments.map((assignment) => assignment.event.id);
+
+    if (eventIds.length === 0) {
+      return [];
+    }
+
+    const countsByEventId = new Map<
+      string,
+      { totalParticipants: number; totalRedeemed: number }
+    >();
+
+    await Promise.all(
+      eventIds.map(async (eventId) => {
+        const [totalParticipants, totalRedeemed] = await Promise.all([
+          this.prisma.issuedTicket.count({
+            where: {
+              isCancelled: false,
+              orderItem: {
+                ticketType: { eventId },
+                order: { paymentStatus: 'PAID' },
+              },
+            },
+          }),
+          this.prisma.issuedTicket.count({
+            where: {
+              isCancelled: false,
+              isRedeemed: true,
+              orderItem: {
+                ticketType: { eventId },
+                order: { paymentStatus: 'PAID' },
+              },
+            },
+          }),
+        ]);
+        countsByEventId.set(eventId, { totalParticipants, totalRedeemed });
+      }),
+    );
+
+    const now = new Date();
+
+    return assignments.map((assignment) => {
+      const event = assignment.event;
+      const counts = countsByEventId.get(event.id) ?? {
+        totalParticipants: 0,
+        totalRedeemed: 0,
+      };
+
+      const isActive =
+        event.status === 'PUBLISHED' &&
+        now >= event.startDatetime &&
+        now <= event.endDatetime;
+
+      return {
+        id: event.id,
+        title: event.title,
+        coverImageUrl: event.coverImageUrl,
+        status: event.status,
+        location: event.location,
+        startDatetime: event.startDatetime,
+        endDatetime: event.endDatetime,
+        isActive,
+        assignedAt: assignment.createdAt,
+        participantSummary: counts,
+      };
+    });
+  }
+
+  async getEventDashboard(userId: string, eventId: string) {
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      select: {
+        id: true,
+        title: true,
+        location: true,
+        status: true,
+        startDatetime: true,
+        endDatetime: true,
+      },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
+    const staffAssignment = await this.prisma.eventStaff.findUnique({
+      where: {
+        eventId_userId: {
+          eventId,
+          userId,
+        },
+      },
+    });
+
+    if (!staffAssignment) {
+      throw new ForbiddenException('You are not assigned to this event');
+    }
+
+    const [totalValid, totalRedeemed, recentRedemptions] = await Promise.all([
+      this.prisma.issuedTicket.count({
+        where: {
+          isCancelled: false,
+          orderItem: {
+            ticketType: { eventId },
+            order: { paymentStatus: 'PAID' },
+          },
+        },
+      }),
+      this.prisma.issuedTicket.count({
+        where: {
+          isCancelled: false,
+          isRedeemed: true,
+          orderItem: {
+            ticketType: { eventId },
+            order: { paymentStatus: 'PAID' },
+          },
+        },
+      }),
+      this.prisma.issuedTicket.findMany({
+        where: {
+          isCancelled: false,
+          isRedeemed: true,
+          orderItem: {
+            ticketType: { eventId },
+            order: { paymentStatus: 'PAID' },
+          },
+        },
+        select: {
+          id: true,
+          ticketCode: true,
+          redeemedAt: true,
+          orderItem: {
+            select: {
+              ticketType: {
+                select: {
+                  name: true,
+                },
+              },
+              order: {
+                select: {
+                  user: {
+                    select: {
+                      fullName: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        orderBy: {
+          redeemedAt: 'desc',
+        },
+        take: 5,
+      }),
+    ]);
+
+    const remainingTickets = Math.max(0, totalValid - totalRedeemed);
+    const redemptionRate =
+      totalValid > 0
+        ? Number(((totalRedeemed / totalValid) * 100).toFixed(2))
+        : 0;
+
+    const now = new Date();
+    const isActive =
+      event.status === 'PUBLISHED' &&
+      now >= event.startDatetime &&
+      now <= event.endDatetime;
+
+    return {
+      event: {
+        id: event.id,
+        title: event.title,
+        status: event.status,
+        location: event.location,
+        startDatetime: event.startDatetime,
+        endDatetime: event.endDatetime,
+        isActive,
+      },
+      statistics: {
+        totalParticipants: totalValid,
+        totalRedeemed,
+        remainingTickets,
+        redemptionRate,
+      },
+      recentRedemptions: recentRedemptions.map((ticket) => ({
+        id: ticket.id,
+        ticketCode: ticket.ticketCode,
+        ticketType: ticket.orderItem.ticketType.name,
+        buyerName: ticket.orderItem.order.user.fullName,
+        redeemedAt: ticket.redeemedAt,
+      })),
+    };
+  }
 
   async findAllStaff(query?: QueryStaffDto) {
     const page = query?.page || 1;
