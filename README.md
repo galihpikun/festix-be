@@ -43,6 +43,17 @@ Catatan: model database untuk order, refund, issued ticket, serta relasi staff e
 - [x] Melihat daftar dan detail order milik user
 - [x] Membuat payment session melalui Xendit
 - [x] Menerima webhook payment completed dan payment expired dari Xendit
+- [x] Penerbitan e-ticket (issued tickets) otomatis setelah pembayaran berhasil
+- [x] Melihat daftar tiket e-ticket milik user (`/issued-tickets/my`) dan detail tiket
+- [x] Admin melihat daftar dan detail semua issued ticket (`/issued-tickets/admin`)
+- [x] Validasi dan lookup tiket oleh staff (`/ticket-redemption/lookup`)
+- [x] Penebusan/check-in tiket (redemption) atomik & race-safe oleh staff (`/ticket-redemption/redeem`)
+- [x] Staff melihat daftar event yang ditugaskan (`/staff/events`)
+- [x] Staff dashboard per event dengan ringkasan statistik & riwayat check-in (`/staff/events/:eventId/dashboard`)
+- [x] Manajemen staf oleh admin (list staf, detail staf, penugasan ke event, hapus penugasan)
+- [x] Manajemen user oleh admin (list user, ganti role, suspend/unsuspend)
+- [x] Admin dashboard agregat metrik platform (`/admin/dashboard`)
+- [x] Pencatatan audit log terintegrasi untuk aksi admin dan staf
 
 ## Stack teknologi
 
@@ -79,6 +90,12 @@ festix-be/
 │   ├── organizer/
 │   ├── orders/
 │   ├── payments/
+│   ├── issued-tickets/
+│   ├── ticket-redemption/
+│   ├── staff/
+│   ├── users/
+│   ├── admin-dashboard/
+│   ├── audit-logs/
 │   ├── prisma/
 │   └── ticket-types/
 ├── test/
@@ -99,6 +116,12 @@ festix-be/
 - `src/organizer` : pengajuan organizer, upload dokumen, review admin
 - `src/orders` : pembuatan order, reservasi quota ticket, dan riwayat order user
 - `src/payments` : pembuatan payment session Xendit dan webhook status pembayaran
+- `src/issued-tickets` : penerbitan tiket, akses e-ticket user, dan review tiket oleh admin
+- `src/ticket-redemption` : lookup validasi tiket dan check-in/redemption race-safe oleh staff
+- `src/staff` : manajemen staf oleh admin, event staf, dan dashboard staf per event
+- `src/users` : manajemen user platform, update role, suspend/unsuspend akun oleh admin
+- `src/admin-dashboard` : ringkasan metrik dan statistik platform untuk admin
+- `src/audit-logs` : pencatatan riwayat audit aktivitas admin dan staf
 - `src/ticket-types` : CRUD tiket per event
 - `src/cloudinary` : upload media ke Cloudinary
 - `src/mail` : pengiriman email OTP dan notifikasi
@@ -250,6 +273,50 @@ http://localhost:3000
 | Method | Endpoint            | Deskripsi                                 | Auth         |
 | ------ | ------------------- | ----------------------------------------- | ------------ |
 | POST   | `/payments/webhook` | Menerima webhook status pembayaran Xendit | Token Xendit |
+
+### Issued Tickets
+
+| Method | Endpoint                    | Deskripsi                               | Auth        |
+| ------ | --------------------------- | --------------------------------------- | ----------- |
+| GET    | `/issued-tickets/my`        | Melihat tiket saya yang aktif           | JWT         |
+| GET    | `/issued-tickets/:id`       | Melihat detail tiket saya               | JWT         |
+| GET    | `/issued-tickets/admin`     | Melihat daftar tiket semua user (Admin) | JWT + ADMIN |
+| GET    | `/issued-tickets/admin/:id` | Melihat detail tiket untuk Admin        | JWT + ADMIN |
+
+### Ticket Redemption
+
+| Method | Endpoint                    | Deskripsi                               | Auth        |
+| ------ | --------------------------- | --------------------------------------- | ----------- |
+| POST   | `/ticket-redemption/lookup` | Validasi & lookup informasi tiket       | JWT + STAFF |
+| POST   | `/ticket-redemption/redeem` | Check-in / redemption tiket (race-safe) | JWT + STAFF |
+
+### Staff
+
+| Method | Endpoint                           | Deskripsi                                      | Auth        |
+| ------ | ---------------------------------- | ---------------------------------------------- | ----------- |
+| GET    | `/staff/events`                    | Daftar event yang ditugaskan kepada staff      | JWT + STAFF |
+| GET    | `/staff/events/:eventId/dashboard` | Dashboard event staff (statistik & ringkasan)  | JWT + STAFF |
+| GET    | `/staff/admin`                     | Daftar staff platform (Admin)                  | JWT + ADMIN |
+| GET    | `/staff/admin/event/:eventId`      | Daftar staff pada event tertentu               | JWT + ADMIN |
+| GET    | `/staff/admin/:id`                 | Detail staf beserta event yang ditugaskan      | JWT + ADMIN |
+| POST   | `/staff/admin/assign`              | Menugaskan user ber-role STAFF ke suatu event  | JWT + ADMIN |
+| DELETE | `/staff/admin/assign/:id`          | Menghapus penugasan staf dari event            | JWT + ADMIN |
+
+### Users Management
+
+| Method | Endpoint                   | Deskripsi                                  | Auth        |
+| ------ | -------------------------- | ------------------------------------------ | ----------- |
+| GET    | `/users/admin`             | Daftar user platform                       | JWT + ADMIN |
+| GET    | `/users/admin/:id`         | Detail user                                | JWT + ADMIN |
+| PATCH  | `/users/admin/:id/role`    | Ubah role user                             | JWT + ADMIN |
+| PATCH  | `/users/admin/:id/suspend` | Suspend user                               | JWT + ADMIN |
+| PATCH  | `/users/admin/:id/unsuspend` | Batalkan suspend user                    | JWT + ADMIN |
+
+### Admin Dashboard
+
+| Method | Endpoint           | Deskripsi                                       | Auth        |
+| ------ | ------------------ | ----------------------------------------------- | ----------- |
+| GET    | `/admin/dashboard` | Mengambil data statistik & ringkasan platform   | JWT + ADMIN |
 
 ## Role yang dipakai
 
