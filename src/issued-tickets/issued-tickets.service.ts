@@ -186,7 +186,9 @@ export class IssuedTicketsService {
           orderItem: {
             order: {
               OR: [
-                { orderNumber: { contains: query.search, mode: 'insensitive' } },
+                {
+                  orderNumber: { contains: query.search, mode: 'insensitive' },
+                },
                 {
                   user: {
                     fullName: { contains: query.search, mode: 'insensitive' },

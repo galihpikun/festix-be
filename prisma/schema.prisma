@@ -80,7 +80,8 @@ model User {
   // Relations
   organizerProfile OrganizerProfile?
   events           Event[]           @relation("UserEvents")
-  assignedEvents   EventStaff[]      // 🔹 Relasi staff ke event yang ditugaskan
+  assignedEvents   EventStaff[]
+  staffInvitations StaffInvitation[]
   orders           Order[]
   refunds          Refund[]          @relation("UserRefunds")
   otps             Otp[]
@@ -180,6 +181,7 @@ model Event {
   category        Category    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   ticketTypes     TicketType[]
   staffs          EventStaff[]
+  staffInvitations StaffInvitation[]
 
   @@map("events")
 }
@@ -197,6 +199,20 @@ model EventStaff {
 
   @@unique([eventId, userId]) // 1 Staff hanya bisa didaftarkan 1x di event yang sama
   @@map("event_staffs")
+}
+
+model StaffInvitation {
+  id        String   @id @default(uuid())
+  eventId   String   @map("event_id")
+  userId    String   @map("user_id")
+  activated Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@map("staff_invitations")
 }
 
 model TicketType {

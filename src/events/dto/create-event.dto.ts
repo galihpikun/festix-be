@@ -1,4 +1,5 @@
 import {
+  IsArray,
   IsBoolean,
   IsDateString,
   IsNotEmpty,
@@ -6,6 +7,7 @@ import {
   IsString,
   IsUUID,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class CreateEventDto {
   @IsNotEmpty()
@@ -35,4 +37,21 @@ export class CreateEventDto {
   @IsOptional()
   @IsBoolean()
   isRefundable?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [value];
+      } catch {
+        return [value];
+      }
+    }
+    return value;
+  })
+  @IsArray()
+  @IsUUID('4', { each: true })
+  invitedUserIds?: string[];
 }

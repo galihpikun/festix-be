@@ -2,7 +2,11 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
-import { ForbiddenException, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { Role } from '../../generated/prisma/client';
 
 describe('UsersService', () => {

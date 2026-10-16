@@ -74,6 +74,20 @@ export class OrganizerController {
     return this.organizerService.getMyOrganizerProfile(req.user.userId);
   }
 
+  // Get Organizer Dashboard
+  @UseGuards(JwtAuthGuard)
+  @Get('dashboard')
+  getDashboard(@Req() req: any) {
+    return this.organizerService.getOrganizerDashboard(req.user.userId);
+  }
+
+  // Get Organizer Staff Roster
+  @UseGuards(JwtAuthGuard)
+  @Get('staff')
+  getOrganizerStaff(@Req() req: any, @Query('eventId') eventId?: string) {
+    return this.organizerService.getOrganizerStaff(req.user.userId, eventId);
+  }
+
   // ADMIN
 
   // Get All Organizer Applications

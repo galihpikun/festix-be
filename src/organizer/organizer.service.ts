@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -492,6 +493,325 @@ export class OrganizerService {
     return {
       message: 'Organizer rejected successfully',
       organizer: updatedOrganizer,
+    };
+  }
+
+  async getOrganizerDashboard(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { organizerProfile: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (!user.organizerProfile || user.organizerProfile.status !== 'APPROVED') {
+      throw new ForbiddenException(
+        'Your organizer account has not been approved',
+      );
+    }
+
+    const [
+      totalEvents,
+      publishedEvents,
+      pendingEvents,
+      draftEvents,
+      rejectedEvents,
+      paidOrderItems,
+      checkedInCount,
+      upcomingEvents,
+      draftsNeedingAttention,
+      rejectedNeedingAttention,
+    ] = await Promise.all([
+      this.prisma.event.count({ where: { organizerId: userId } }),
+      this.prisma.event.count({
+        where: { organizerId: userId, status: 'PUBLISHED' },
+      }),
+      this.prisma.event.count({
+        where: { organizerId: userId, status: 'PENDING_REVIEW' },
+      }),
+      this.prisma.event.count({
+        where: { organizerId: userId, status: 'DRAFT' },
+      }),
+      this.prisma.event.count({
+        where: { organizerId: userId, status: 'REJECTED' },
+      }),
+      this.prisma.orderItem.findMany({
+        where: {
+          order: { paymentStatus: 'PAID' },
+          ticketType: { event: { organizerId: userId } },
+        },
+        select: {
+          id: true,
+          quantity: true,
+          price: true,
+          createdAt: true,
+          order: {
+            select: {
+              id: true,
+              orderNumber: true,
+              createdAt: true,
+              user: {
+                select: {
+                  id: true,
+                  fullName: true,
+                  email: true,
+                },
+              },
+            },
+          },
+          ticketType: {
+            select: {
+              id: true,
+              name: true,
+              event: {
+                select: {
+                  id: true,
+                  title: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.issuedTicket.count({
+        where: {
+          isRedeemed: true,
+          orderItem: {
+            ticketType: { event: { organizerId: userId } },
+            order: { paymentStatus: 'PAID' },
+          },
+        },
+      }),
+      this.prisma.event.findMany({
+        where: {
+          organizerId: userId,
+          status: 'PUBLISHED',
+        },
+        include: {
+          category: true,
+          ticketTypes: {
+            select: {
+              id: true,
+              name: true,
+              quota: true,
+              availableQuota: true,
+            },
+          },
+        },
+        orderBy: { startDatetime: 'asc' },
+        take: 4,
+      }),
+      this.prisma.event.findMany({
+        where: {
+          organizerId: userId,
+          status: 'DRAFT',
+        },
+        include: {
+          category: true,
+          ticketTypes: true,
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: 3,
+      }),
+      this.prisma.event.findMany({
+        where: {
+          organizerId: userId,
+          status: 'REJECTED',
+        },
+        include: {
+          category: true,
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: 3,
+      }),
+    ]);
+
+    let totalTicketsSold = 0;
+    let grossRevenue = 0;
+    const distinctOrderIds = new Set<string>();
+
+    for (const item of paidOrderItems) {
+      totalTicketsSold += item.quantity;
+      grossRevenue += Number(item.price) * item.quantity;
+      distinctOrderIds.add(item.order.id);
+    }
+
+    const recentSales = paidOrderItems.slice(0, 10).map((item) => ({
+      orderId: item.order.id,
+      orderNumber: item.order.orderNumber,
+      buyerName: item.order.user.fullName,
+      buyerEmail: item.order.user.email,
+      ticketName: item.ticketType.name,
+      eventTitle: item.ticketType.event.title,
+      quantity: item.quantity,
+      totalAmount: Number(item.price) * item.quantity,
+      createdAt: item.createdAt,
+    }));
+
+    return {
+      organizationName: user.organizerProfile.organizationName,
+      metrics: {
+        totalEvents,
+        publishedEvents,
+        pendingEvents,
+        draftEvents,
+        rejectedEvents,
+        paidOrdersCount: distinctOrderIds.size,
+        totalTicketsSold,
+        grossRevenue,
+        checkedInAttendees: checkedInCount,
+      },
+      upcomingEvents: upcomingEvents.map((evt) => {
+        const totalQuota = evt.ticketTypes.reduce(
+          (acc, tt) => acc + tt.quota,
+          0,
+        );
+        const availableQuota = evt.ticketTypes.reduce(
+          (acc, tt) => acc + tt.availableQuota,
+          0,
+        );
+        const sold = Math.max(0, totalQuota - availableQuota);
+        return {
+          id: evt.id,
+          title: evt.title,
+          coverImageUrl: evt.coverImageUrl,
+          location: evt.location,
+          startDatetime: evt.startDatetime,
+          endDatetime: evt.endDatetime,
+          category: evt.category.name,
+          status: evt.status,
+          totalQuota,
+          soldQuota: sold,
+        };
+      }),
+      actionItems: {
+        drafts: draftsNeedingAttention.map((evt) => ({
+          id: evt.id,
+          title: evt.title,
+          ticketTypesCount: evt.ticketTypes.length,
+          updatedAt: evt.updatedAt,
+        })),
+        rejected: rejectedNeedingAttention.map((evt) => ({
+          id: evt.id,
+          title: evt.title,
+          rejectionReason: evt.rejectionReason,
+          updatedAt: evt.updatedAt,
+        })),
+      },
+      recentSales,
+    };
+  }
+
+  async getOrganizerStaff(userId: string, eventId?: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { organizerProfile: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (!user.organizerProfile || user.organizerProfile.status !== 'APPROVED') {
+      throw new ForbiddenException(
+        'Your organizer account has not been approved',
+      );
+    }
+
+    const eventWhere: Prisma.EventWhereInput = {
+      organizerId: userId,
+      ...(eventId ? { id: eventId } : {}),
+    };
+
+    const [activeAssignments, pendingInvitations] = await Promise.all([
+      this.prisma.eventStaff.findMany({
+        where: {
+          event: eventWhere,
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+              avatar: true,
+            },
+          },
+          event: {
+            select: {
+              id: true,
+              title: true,
+              status: true,
+              startDatetime: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.staffInvitation.findMany({
+        where: {
+          activated: false,
+          event: eventWhere,
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+              avatar: true,
+            },
+          },
+          event: {
+            select: {
+              id: true,
+              title: true,
+              status: true,
+              startDatetime: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    const activeList = activeAssignments.map((a) => ({
+      id: a.id,
+      type: 'ACTIVE' as const,
+      assignmentId: a.id,
+      eventId: a.event.id,
+      eventTitle: a.event.title,
+      eventStatus: a.event.status,
+      startDatetime: a.event.startDatetime,
+      userId: a.user.id,
+      fullName: a.user.fullName,
+      email: a.user.email,
+      avatar: a.user.avatar,
+      createdAt: a.createdAt,
+    }));
+
+    const pendingList = pendingInvitations.map((i) => ({
+      id: i.id,
+      type: 'PENDING' as const,
+      invitationId: i.id,
+      eventId: i.event.id,
+      eventTitle: i.event.title,
+      eventStatus: i.event.status,
+      startDatetime: i.event.startDatetime,
+      userId: i.user.id,
+      fullName: i.user.fullName,
+      email: i.user.email,
+      avatar: i.user.avatar,
+      createdAt: i.createdAt,
+    }));
+
+    return {
+      active: activeList,
+      pending: pendingList,
+      totalCount: activeList.length + pendingList.length,
     };
   }
 }

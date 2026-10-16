@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -18,6 +19,8 @@ import { EventsService } from './events.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { QueryAdminEventsDto } from './dto/query-admin-events.dto';
+import { QueryOrganizerEventsDto } from './dto/query-organizer-events.dto';
+import { SearchInvitableUsersDto } from './dto/search-invitable-users.dto';
 
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RoleGuard } from 'src/auth/guards/role.guard';
@@ -66,7 +69,54 @@ export class EventsController {
   @Roles('ADMIN')
   @Get('admin/:id')
   getAdminEventDetail(@Param('id') eventId: string) {
-    return this.eventsService.eventDetail(eventId);
+    return this.eventsService.eventDetail(eventId, true);
+  }
+
+  // ==========================================
+  // ORGANIZER
+  // ==========================================
+
+  // MY EVENTS
+  @UseGuards(JwtAuthGuard)
+  @Get('organizer/my-events')
+  getMyEvents(@Req() req, @Query() query: QueryOrganizerEventsDto) {
+    return this.eventsService.getMyEvents(req.user.userId, query);
+  }
+
+  // ORGANIZER EVENT DETAIL
+  @UseGuards(JwtAuthGuard)
+  @Get('organizer/:id')
+  getOrganizerEventDetail(@Req() req, @Param('id') eventId: string) {
+    return this.eventsService.getOrganizerEventDetail(req.user.userId, eventId);
+  }
+
+  // ORGANIZER EVENT CHECKIN MONITOR
+  @UseGuards(JwtAuthGuard)
+  @Get('organizer/:id/checkin')
+  getOrganizerEventCheckin(@Req() req, @Param('id') eventId: string) {
+    return this.eventsService.getOrganizerEventCheckin(req.user.userId, eventId);
+  }
+
+  // REMOVE STAFF FROM ORGANIZER EVENT
+  @UseGuards(JwtAuthGuard)
+  @Delete('organizer/:eventId/staff/:assignmentId')
+  removeOrganizerStaff(
+    @Req() req,
+    @Param('eventId') eventId: string,
+    @Param('assignmentId') assignmentId: string,
+  ) {
+    return this.eventsService.removeOrganizerStaff(
+      req.user.userId,
+      eventId,
+      assignmentId,
+    );
+  }
+
+  // SEARCH INVITABLE USERS
+  @UseGuards(JwtAuthGuard)
+  @Get('search-invitable-users')
+  searchInvitableUsers(@Req() req, @Query() query: SearchInvitableUsersDto) {
+    return this.eventsService.searchInvitableUsers(query, req.user.userId);
   }
 
   // ==========================================
@@ -77,10 +127,6 @@ export class EventsController {
   eventDetail(@Param('id') eventId: string) {
     return this.eventsService.eventDetail(eventId);
   }
-
-  // ==========================================
-  // ORGANIZER
-  // ==========================================
 
   // CREATE EVENT
 
