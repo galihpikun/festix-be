@@ -1,4 +1,8 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { IssuedTicketsService } from './issued-tickets.service';
@@ -34,6 +38,81 @@ describe('IssuedTicketsService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  describe('getMyTickets', () => {
+    it('should query tickets filtered by authenticated userId and PAID status', async () => {
+      const mockTickets = [
+        {
+          id: 'ticket-1',
+          ticketCode: 'TCK-TEST-1',
+          isRedeemed: false,
+          isCancelled: false,
+        },
+      ];
+      mockPrisma.issuedTicket.findMany.mockResolvedValue(mockTickets);
+
+      const result = await service.getMyTickets('user-123');
+
+      expect(result).toEqual(mockTickets);
+      expect(mockPrisma.issuedTicket.findMany).toHaveBeenCalledWith({
+        where: {
+          orderItem: {
+            order: {
+              userId: 'user-123',
+              paymentStatus: 'PAID',
+            },
+          },
+        },
+        include: expect.any(Object),
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
+    });
+  });
+
+  describe('getTicketDetail', () => {
+    it('should return ticket if owned by user', async () => {
+      const mockTicket = {
+        id: 'ticket-1',
+        ticketCode: 'TCK-TEST-1',
+        orderItem: {
+          order: {
+            userId: 'user-123',
+          },
+        },
+      };
+      mockPrisma.issuedTicket.findUnique.mockResolvedValue(mockTicket);
+
+      const result = await service.getTicketDetail('user-123', 'ticket-1');
+      expect(result).toEqual(mockTicket);
+    });
+
+    it('should throw NotFoundException if ticket does not exist', async () => {
+      mockPrisma.issuedTicket.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.getTicketDetail('user-123', 'non-existent'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw ForbiddenException if ticket belongs to another user', async () => {
+      const mockTicket = {
+        id: 'ticket-1',
+        ticketCode: 'TCK-TEST-1',
+        orderItem: {
+          order: {
+            userId: 'other-user',
+          },
+        },
+      };
+      mockPrisma.issuedTicket.findUnique.mockResolvedValue(mockTicket);
+
+      await expect(
+        service.getTicketDetail('user-123', 'ticket-1'),
+      ).rejects.toThrow(ForbiddenException);
+    });
   });
 
   describe('issueTicketsForOrder', () => {
