@@ -94,7 +94,10 @@ export class EventsController {
   @UseGuards(JwtAuthGuard)
   @Get('organizer/:id/checkin')
   getOrganizerEventCheckin(@Req() req, @Param('id') eventId: string) {
-    return this.eventsService.getOrganizerEventCheckin(req.user.userId, eventId);
+    return this.eventsService.getOrganizerEventCheckin(
+      req.user.userId,
+      eventId,
+    );
   }
 
   // REMOVE STAFF FROM ORGANIZER EVENT

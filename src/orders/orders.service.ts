@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -31,51 +31,150 @@ export class OrdersService {
       throw new NotFoundException('User not found');
     }
 
+    const fingerprint = this.computeFingerprint(dto);
+
+    if (dto.idempotencyKey) {
+      const existing = await this.prisma.order.findUnique({
+        where: {
+          userId_idempotencyKey: {
+            userId,
+            idempotencyKey: dto.idempotencyKey,
+          },
+        },
+        include: {
+          orderItems: {
+            include: {
+              ticketType: {
+                include: {
+                  event: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (existing) {
+        if (existing.requestFingerprint !== fingerprint) {
+          throw new ConflictException(
+            'Idempotency key already used with a different request',
+          );
+        }
+
+        if (existing.paymentUrl) {
+          return {
+            message: 'Order created successfully',
+            order: existing,
+            paymentUrl: existing.paymentUrl,
+          };
+        }
+
+        if (
+          existing.paymentStatus === 'FAILED' ||
+          existing.paymentStatus === 'EXPIRED'
+        ) {
+          throw new ConflictException(
+            'Previous order with this idempotency key has failed or expired. Use a new idempotency key.',
+          );
+        }
+
+        return {
+          message: 'Order created successfully',
+          order: existing,
+          paymentUrl: existing.paymentUrl,
+        };
+      }
+    }
+
+    const ticketTypeIds = dto.items.map((item) => item.ticketTypeId);
+    const uniqueIds = [...new Set(ticketTypeIds)];
+    if (uniqueIds.length !== ticketTypeIds.length) {
+      throw new BadRequestException(
+        'Duplicate ticket types in order items are not allowed',
+      );
+    }
+
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 15 * 60 * 1000);
     const orderNumber = this.generateOrderNumber(now);
 
     const order = await this.prisma.$transaction(async (tx) => {
-      const ticketType = await tx.ticketType.findUnique({
-        where: {
-          id: dto.ticketTypeId,
-        },
-        include: {
-          event: true,
-        },
-      });
+      const ticketTypes = await Promise.all(
+        dto.items.map((item) =>
+          tx.ticketType.findUnique({
+            where: { id: item.ticketTypeId },
+            include: { event: true },
+          }),
+        ),
+      );
 
-      if (!ticketType) {
-        throw new NotFoundException('Ticket type not found');
+      let eventId: string | null = null;
+
+      for (let i = 0; i < dto.items.length; i++) {
+        const ticketType = ticketTypes[i];
+        const item = dto.items[i];
+
+        if (!ticketType) {
+          throw new NotFoundException(
+            `Ticket type not found: ${item.ticketTypeId}`,
+          );
+        }
+
+        if (eventId === null) {
+          eventId = ticketType.eventId;
+        } else if (ticketType.eventId !== eventId) {
+          throw new BadRequestException(
+            'All ticket types must belong to the same event',
+          );
+        }
+
+        if (ticketType.event.status !== 'PUBLISHED') {
+          throw new ConflictException(
+            'Event is not available for ticket sales',
+          );
+        }
+
+        if (ticketType.event.endDatetime <= now) {
+          throw new ConflictException('Event has already ended');
+        }
       }
 
-      if (ticketType.event.status !== 'PUBLISHED') {
-        throw new ConflictException('Event is not available for ticket sales');
-      }
+      for (let i = 0; i < dto.items.length; i++) {
+        const ticketType = ticketTypes[i]!;
+        const item = dto.items[i];
 
-      if (ticketType.event.endDatetime <= now) {
-        throw new ConflictException('Event has already ended');
-      }
-
-      const reservedQuota = await tx.ticketType.updateMany({
-        where: {
-          id: ticketType.id,
-          availableQuota: {
-            gte: dto.quantity,
+        const reservedQuota = await tx.ticketType.updateMany({
+          where: {
+            id: ticketType.id,
+            availableQuota: {
+              gte: item.quantity,
+            },
           },
-        },
-        data: {
-          availableQuota: {
-            decrement: dto.quantity,
+          data: {
+            availableQuota: {
+              decrement: item.quantity,
+            },
           },
-        },
-      });
+        });
 
-      if (reservedQuota.count === 0) {
-        throw new ConflictException('Insufficient ticket quota');
+        if (reservedQuota.count === 0) {
+          throw new ConflictException(
+            `Insufficient ticket quota for: ${ticketType.name}`,
+          );
+        }
       }
 
-      const totalAmount = ticketType.price.mul(dto.quantity);
+      let totalAmount = new Prisma.Decimal(0);
+      const orderItemsData = dto.items.map((item, i) => {
+        const ticketType = ticketTypes[i]!;
+        const lineTotal = ticketType.price.mul(item.quantity);
+        totalAmount = totalAmount.add(lineTotal);
+        return {
+          ticketTypeId: ticketType.id,
+          quantity: item.quantity,
+          price: ticketType.price,
+        };
+      });
 
       return tx.order.create({
         data: {
@@ -84,12 +183,10 @@ export class OrdersService {
           totalAmount,
           paymentStatus: 'PENDING',
           expiresAt,
+          idempotencyKey: dto.idempotencyKey ?? null,
+          requestFingerprint: dto.idempotencyKey ? fingerprint : null,
           orderItems: {
-            create: {
-              ticketTypeId: ticketType.id,
-              quantity: dto.quantity,
-              price: ticketType.price,
-            },
+            create: orderItemsData,
           },
         },
         include: {
@@ -362,5 +459,13 @@ export class OrdersService {
     const randomPart = randomBytes(4).toString('hex').toUpperCase();
 
     return `ORD-${datePart}-${randomPart}`;
+  }
+
+  private computeFingerprint(dto: CreateOrderDto): string {
+    const normalized = dto.items
+      .map((item) => `${item.ticketTypeId}:${item.quantity}`)
+      .sort()
+      .join('|');
+    return createHash('sha256').update(normalized).digest('hex');
   }
 }

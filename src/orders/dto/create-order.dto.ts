@@ -1,7 +1,17 @@
 import { Type } from 'class-transformer';
-import { IsNotEmpty, IsNumber, IsUUID, Min } from 'class-validator';
+import {
+  ArrayMinSize,
+  IsArray,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 
-export class CreateOrderDto {
+export class OrderItemDto {
   @IsNotEmpty()
   @IsUUID()
   ticketTypeId!: string;
@@ -10,4 +20,16 @@ export class CreateOrderDto {
   @IsNumber()
   @Min(1)
   quantity!: number;
+}
+
+export class CreateOrderDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => OrderItemDto)
+  items!: OrderItemDto[];
+
+  @IsOptional()
+  @IsString()
+  idempotencyKey?: string;
 }

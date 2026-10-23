@@ -171,7 +171,10 @@ describe('EventsService Admin Actions', () => {
     });
 
     it('should allow an admin detail lookup to include non-published events', async () => {
-      prisma.event.findFirst.mockResolvedValue({ id: 'event-1', status: 'DRAFT' });
+      prisma.event.findFirst.mockResolvedValue({
+        id: 'event-1',
+        status: 'DRAFT',
+      });
 
       const event = await service.eventDetail('event-1', true);
 
@@ -429,7 +432,9 @@ describe('EventsService Admin Actions', () => {
           },
         ],
       });
-      prisma.eventStaff.upsert.mockRejectedValue(new Error('assignment failed'));
+      prisma.eventStaff.upsert.mockRejectedValue(
+        new Error('assignment failed'),
+      );
 
       await expect(service.approveEvent('evt-1')).rejects.toThrow(
         'assignment failed',

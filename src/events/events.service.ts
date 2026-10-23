@@ -648,7 +648,35 @@ export class EventsService {
           tx,
         );
 
-        return tx.event.findUniqueOrThrow({ where: { id: eventId } });
+        return tx.event.findUniqueOrThrow({
+          where: { id: eventId },
+          include: {
+            category: true,
+            organizer: {
+              select: {
+                id: true,
+                fullName: true,
+                organizerProfile: {
+                  select: {
+                    organizationName: true,
+                  },
+                },
+              },
+            },
+            ticketTypes: true,
+            staffs: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    fullName: true,
+                    email: true,
+                  },
+                },
+              },
+            },
+          },
+        });
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
@@ -686,6 +714,32 @@ export class EventsService {
         data: {
           status: 'REJECTED',
           rejectionReason: reason.trim(),
+        },
+        include: {
+          category: true,
+          organizer: {
+            select: {
+              id: true,
+              fullName: true,
+              organizerProfile: {
+                select: {
+                  organizationName: true,
+                },
+              },
+            },
+          },
+          ticketTypes: true,
+          staffs: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  fullName: true,
+                  email: true,
+                },
+              },
+            },
+          },
         },
       });
 
@@ -756,6 +810,32 @@ export class EventsService {
         data: {
           status: 'CANCELLED',
           rejectionReason: reason.trim(),
+        },
+        include: {
+          category: true,
+          organizer: {
+            select: {
+              id: true,
+              fullName: true,
+              organizerProfile: {
+                select: {
+                  organizationName: true,
+                },
+              },
+            },
+          },
+          ticketTypes: true,
+          staffs: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  fullName: true,
+                  email: true,
+                },
+              },
+            },
+          },
         },
       });
 
@@ -844,7 +924,10 @@ export class EventsService {
       include: { organizerProfile: true },
     });
 
-    if (!user?.organizerProfile || user.organizerProfile.status !== 'APPROVED') {
+    if (
+      !user?.organizerProfile ||
+      user.organizerProfile.status !== 'APPROVED'
+    ) {
       throw new ForbiddenException(
         'Your organizer account has not been approved',
       );
@@ -1010,7 +1093,9 @@ export class EventsService {
 
     const remainingTickets = Math.max(0, totalValid - totalRedeemed);
     const redemptionRate =
-      totalValid > 0 ? Number(((totalRedeemed / totalValid) * 100).toFixed(2)) : 0;
+      totalValid > 0
+        ? Number(((totalRedeemed / totalValid) * 100).toFixed(2))
+        : 0;
 
     return {
       eventId: event.id,

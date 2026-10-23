@@ -3,7 +3,11 @@ import { OrganizerService } from './organizer.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
-import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 
 describe('OrganizerService Admin Review', () => {
   let service: OrganizerService;
