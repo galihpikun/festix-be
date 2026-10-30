@@ -35,6 +35,7 @@ export class EventsService {
     return await this.prisma.event.findMany({
       where: {
         status: 'PUBLISHED',
+        endDatetime: { gt: new Date() },
       },
       include: {
         category: true,
@@ -50,6 +51,7 @@ export class EventsService {
     return await this.prisma.event.findMany({
       where: {
         status: 'PUBLISHED',
+        endDatetime: { gt: new Date() },
       },
       include: {
         category: true,
@@ -122,7 +124,9 @@ export class EventsService {
     const event = await this.prisma.event.findFirst({
       where: {
         id,
-        ...(includeNonPublished ? {} : { status: 'PUBLISHED' }),
+        ...(includeNonPublished
+          ? {}
+          : { status: 'PUBLISHED', endDatetime: { gt: new Date() } }),
       },
       include: {
         category: true,

@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Patch,
+  Post,
+  Req,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { RegisterDto } from './dto/register.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { AuthService } from './auth.service';
@@ -7,6 +18,8 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { ForgotPassDto } from './dto/forgot-password.dto';
 import { VerifyForgotPassDto } from './dto/verify-forgot-pass.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { Roles } from './decorators/role.decorator';
 import { RoleGuard } from './guards/role.guard';
@@ -51,5 +64,36 @@ export class AuthController {
       message: 'You are authenticated',
       data: req.user,
     };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor('avatar'))
+  @Patch('me')
+  async updateProfile(
+    @Req() req: any,
+    @Body() dto: UpdateProfileDto,
+    @UploadedFile() avatar?: any,
+  ) {
+    const data = await this.authService.updateProfile(
+      req.user.userId,
+      dto,
+      avatar,
+    );
+    return {
+      message: 'Profile updated successfully',
+      data,
+    };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('change-password/otp')
+  async sendChangePasswordOtp(@Req() req: any) {
+    return this.authService.sendChangePasswordOtp(req.user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('change-password')
+  async changePassword(@Req() req: any, @Body() dto: ChangePasswordDto) {
+    return this.authService.changePassword(req.user.userId, dto);
   }
 }

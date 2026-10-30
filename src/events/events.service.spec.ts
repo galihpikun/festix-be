@@ -155,6 +155,38 @@ describe('EventsService Admin Actions', () => {
     });
   });
 
+  describe('public event listings', () => {
+    it('should only return published events that have not ended', async () => {
+      prisma.event.findMany.mockResolvedValue([]);
+
+      await service.getEvents();
+
+      expect(prisma.event.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            status: 'PUBLISHED',
+            endDatetime: { gt: expect.any(Date) },
+          },
+        }),
+      );
+    });
+
+    it('should only return active published events in most popular listings', async () => {
+      prisma.event.findMany.mockResolvedValue([]);
+
+      await service.getMostPopularEvents();
+
+      expect(prisma.event.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            status: 'PUBLISHED',
+            endDatetime: { gt: expect.any(Date) },
+          },
+        }),
+      );
+    });
+  });
+
   describe('eventDetail', () => {
     it('should only expose published events to public callers', async () => {
       prisma.event.findFirst.mockResolvedValue(null);
@@ -165,7 +197,11 @@ describe('EventsService Admin Actions', () => {
 
       expect(prisma.event.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 'event-1', status: 'PUBLISHED' },
+          where: {
+            id: 'event-1',
+            status: 'PUBLISHED',
+            endDatetime: { gt: expect.any(Date) },
+          },
         }),
       );
     });

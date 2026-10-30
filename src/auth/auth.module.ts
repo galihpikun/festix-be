@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MailModule } from 'src/mail/mail.module';
 import { PrismaModule } from 'src/prisma/prisma.module';
+import { CloudinaryModule } from 'src/cloudinary/cloudinary.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtModule } from '@nestjs/jwt';
@@ -12,6 +13,7 @@ import { RoleGuard } from './guards/role.guard';
   imports: [
     MailModule,
     PrismaModule,
+    CloudinaryModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET,
       signOptions: {

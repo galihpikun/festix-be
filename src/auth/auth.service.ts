@@ -10,11 +10,21 @@ import { VerifyEmailDto } from './dto/verify-email.dto';
 import { randomInt } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { MailService } from 'src/mail/mail.service';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { LoginDto } from './dto/login.dto';
 import { JwtService } from '@nestjs/jwt';
 import { ForgotPassDto } from './dto/forgot-password.dto';
 import { VerifyForgotPassDto } from './dto/verify-forgot-pass.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
+
+type UploadedFile = {
+  buffer: Buffer;
+  originalname?: string;
+  mimetype?: string;
+  size?: number;
+};
 
 @Injectable()
 export class AuthService {
@@ -22,6 +32,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly mailService: MailService,
     private readonly jwtService: JwtService,
+    private readonly cloudinary: CloudinaryService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -341,5 +352,151 @@ export class AuthService {
     }
 
     return user;
+  }
+
+  async updateProfile(
+    userId: string,
+    dto: UpdateProfileDto,
+    avatarFile?: UploadedFile,
+  ) {
+    const data: { fullName?: string; avatar?: string } = {};
+
+    if (dto.fullName && dto.fullName.trim().length > 0) {
+      data.fullName = dto.fullName.trim();
+    }
+
+    if (avatarFile?.buffer) {
+      const upload = await this.cloudinary.uploadImage(avatarFile);
+      data.avatar = upload.secure_url;
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data,
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        fullName: true,
+        avatar: true,
+      },
+    });
+
+    return {
+      userId: updated.id,
+      email: updated.email,
+      role: updated.role,
+      fullName: updated.fullName,
+      avatar: updated.avatar,
+    };
+  }
+
+  async sendChangePasswordOtp(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const code = randomInt(100000, 1000000).toString();
+    const otpHash = await bcrypt.hash(code, 10);
+
+    await this.prisma.otp.create({
+      data: {
+        userId: user.id,
+        identifier: user.email,
+        code: otpHash,
+        type: 'FORGOT_PASSWORD',
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+      },
+    });
+
+    await this.mailService.sendMailForgotPasssword(user.email, code);
+
+    return {
+      message: 'OTP Code has been sent to your email address',
+      email: user.email,
+    };
+  }
+
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    // Method 1: Current Password verification
+    if (dto.currentPassword) {
+      const isMatch = await bcrypt.compare(dto.currentPassword, user.password);
+      if (!isMatch) {
+        throw new UnauthorizedException('Current password is incorrect');
+      }
+
+      const newHashed = await bcrypt.hash(dto.newPassword, 10);
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { password: newHashed },
+      });
+
+      return {
+        message: 'Password changed successfully',
+      };
+    }
+
+    // Method 2: OTP verification
+    if (dto.otpCode) {
+      const otp = await this.prisma.otp.findFirst({
+        where: {
+          userId: user.id,
+          identifier: user.email,
+          type: 'FORGOT_PASSWORD',
+          isUsed: false,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
+
+      if (!otp) {
+        throw new UnauthorizedException('Invalid or expired OTP code');
+      }
+
+      if (otp.expiresAt < new Date()) {
+        throw new UnauthorizedException(
+          'Verification Code Has Expired, please request a new one',
+        );
+      }
+
+      const isValid = await bcrypt.compare(dto.otpCode, otp.code);
+      if (!isValid) {
+        throw new UnauthorizedException('Invalid OTP code');
+      }
+
+      const newHashed = await bcrypt.hash(dto.newPassword, 10);
+
+      await this.prisma.$transaction([
+        this.prisma.user.update({
+          where: { id: user.id },
+          data: { password: newHashed },
+        }),
+        this.prisma.otp.update({
+          where: { id: otp.id },
+          data: { isUsed: true, verifiedAt: new Date() },
+        }),
+      ]);
+
+      return {
+        message: 'Password changed successfully with OTP verification',
+      };
+    }
+
+    throw new ConflictException(
+      'Please provide either your current password or an OTP verification code',
+    );
   }
 }
