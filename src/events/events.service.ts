@@ -527,6 +527,64 @@ export class EventsService {
     };
   }
 
+  async completeEvent(userId: string, eventId: string) {
+    const event = await this.prisma.event.findUnique({
+      where: {
+        id: eventId,
+      },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
+    if (event.organizerId !== userId) {
+      throw new ForbiddenException('You are not the owner of this event');
+    }
+
+    if (event.status === 'COMPLETED') {
+      throw new ConflictException('Event is already marked as completed');
+    }
+
+    if (event.status !== 'PUBLISHED') {
+      throw new ConflictException(
+        'Only published events can be marked as completed',
+      );
+    }
+
+    const now = new Date();
+    if (new Date(event.endDatetime) > now) {
+      throw new BadRequestException(
+        'Event cannot be marked as completed until its scheduled end date and time have passed',
+      );
+    }
+
+    const updatedEvent = await this.prisma.event.update({
+      where: {
+        id: eventId,
+      },
+      data: {
+        status: 'COMPLETED',
+      },
+    });
+
+    await this.auditLogs.log(
+      userId,
+      'COMPLETE',
+      'Event',
+      eventId,
+      {
+        title: event.title,
+        previousStatus: event.status,
+      },
+    );
+
+    return {
+      message: 'Event marked as completed successfully',
+      event: updatedEvent,
+    };
+  }
+
   async approveEvent(eventId: string, actorId?: string) {
     const updatedEvent = await this.prisma.$transaction(
       async (tx) => {

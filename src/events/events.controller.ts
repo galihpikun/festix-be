@@ -196,6 +196,13 @@ export class EventsController {
     return this.eventsService.submitEvent(req.user.userId, eventId);
   }
 
+  // COMPLETE EVENT
+  @UseGuards(JwtAuthGuard)
+  @Patch(':id/complete')
+  completeEvent(@Req() req, @Param('id') eventId: string) {
+    return this.eventsService.completeEvent(req.user.userId, eventId);
+  }
+
   // ==========================================
   // ADMIN ACTION
   // ==========================================

@@ -155,6 +155,79 @@ describe('EventsService Admin Actions', () => {
     });
   });
 
+  describe('completeEvent', () => {
+    it('should throw NotFoundException if event does not exist', async () => {
+      prisma.event.findUnique.mockResolvedValue(null);
+
+      await expect(service.completeEvent('user-1', 'event-1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should throw ForbiddenException if user is not the event owner', async () => {
+      prisma.event.findUnique.mockResolvedValue({
+        id: 'event-1',
+        organizerId: 'other-user',
+        status: 'PUBLISHED',
+        endDatetime: new Date(Date.now() - 10000),
+      });
+
+      await expect(service.completeEvent('user-1', 'event-1')).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('should throw ConflictException if event is not published', async () => {
+      prisma.event.findUnique.mockResolvedValue({
+        id: 'event-1',
+        organizerId: 'user-1',
+        status: 'DRAFT',
+        endDatetime: new Date(Date.now() - 10000),
+      });
+
+      await expect(service.completeEvent('user-1', 'event-1')).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('should throw BadRequestException if event has not ended yet', async () => {
+      prisma.event.findUnique.mockResolvedValue({
+        id: 'event-1',
+        organizerId: 'user-1',
+        status: 'PUBLISHED',
+        endDatetime: new Date(Date.now() + 60000), // future
+      });
+
+      await expect(service.completeEvent('user-1', 'event-1')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should complete event successfully when end date is in the past', async () => {
+      prisma.event.findUnique.mockResolvedValue({
+        id: 'event-1',
+        organizerId: 'user-1',
+        title: 'Tech Fest',
+        status: 'PUBLISHED',
+        endDatetime: new Date(Date.now() - 60000), // past
+      });
+
+      prisma.event.update.mockResolvedValue({
+        id: 'event-1',
+        status: 'COMPLETED',
+      });
+
+      const res = await service.completeEvent('user-1', 'event-1');
+      expect(res.message).toBe('Event marked as completed successfully');
+      expect(prisma.event.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'event-1' },
+          data: { status: 'COMPLETED' },
+        }),
+      );
+    });
+  });
+
   describe('public event listings', () => {
     it('should only return published events that have not ended', async () => {
       prisma.event.findMany.mockResolvedValue([]);
