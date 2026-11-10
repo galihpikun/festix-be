@@ -10,11 +10,13 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { Role } from '../../generated/prisma/client';
+import { RefundsService } from '../refunds/refunds.service';
 
 describe('EventsService Admin Actions', () => {
   let service: EventsService;
   let prisma: any;
   let auditLogs: any;
+  let refundsService: any;
 
   beforeEach(async () => {
     prisma = {
@@ -67,6 +69,10 @@ describe('EventsService Admin Actions', () => {
       log: jest.fn(),
     };
 
+    refundsService = {
+      triggerAutomaticEventCancellationRefunds: jest.fn().mockResolvedValue({ count: 1 }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EventsService,
@@ -80,6 +86,7 @@ describe('EventsService Admin Actions', () => {
           },
         },
         { provide: AuditLogsService, useValue: auditLogs },
+        { provide: RefundsService, useValue: refundsService },
       ],
     }).compile();
 
@@ -101,27 +108,34 @@ describe('EventsService Admin Actions', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('should throw ConflictException if event has PAID orders', async () => {
+    it('should trigger automatic cancellation refunds if event is refundable and cancel event', async () => {
       prisma.event.findUnique.mockResolvedValue({
         id: 'event-1',
         title: 'Concert',
         status: 'PUBLISHED',
-        ticketTypes: [
-          {
-            orderItems: [
-              {
-                order: {
-                  paymentStatus: 'PAID',
-                },
-              },
-            ],
-          },
-        ],
+        isRefundable: true,
+        ticketTypes: [],
       });
 
-      await expect(
-        service.cancelEvent('event-1', 'Cancelled by admin'),
-      ).rejects.toThrow(ConflictException);
+      prisma.event.update.mockResolvedValue({
+        id: 'event-1',
+        title: 'Concert',
+        status: 'CANCELLED',
+      });
+
+      const result = await service.cancelEvent(
+        'event-1',
+        'Cancelled by admin',
+        'admin-id',
+      );
+
+      expect(result.message).toBe('Event cancelled successfully');
+      expect(refundsService.triggerAutomaticEventCancellationRefunds).toHaveBeenCalledWith(
+        'event-1',
+        'Cancelled by admin',
+        'admin-id',
+        expect.anything(),
+      );
     });
 
     it('should cancel event successfully when there are no paid orders', async () => {

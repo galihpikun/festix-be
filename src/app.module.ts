@@ -17,6 +17,7 @@ import { AdminDashboardModule } from './admin-dashboard/admin-dashboard.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { UsersModule } from './users/users.module';
 import { StaffModule } from './staff/staff.module';
+import { RefundsModule } from './refunds/refunds.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { StaffModule } from './staff/staff.module';
     AuditLogsModule,
     UsersModule,
     StaffModule,
+    RefundsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

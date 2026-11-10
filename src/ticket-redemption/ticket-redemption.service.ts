@@ -70,6 +70,7 @@ export class TicketRedemptionService {
       ticketCode: ticket.ticketCode,
       isRedeemed: ticket.isRedeemed,
       isCancelled: ticket.isCancelled,
+      isRefunded: ticket.isRefunded,
       redeemedAt: ticket.redeemedAt,
       createdAt: ticket.createdAt,
       ticketType: {
@@ -165,6 +166,10 @@ export class TicketRedemptionService {
         throw new ConflictException('Ticket has been cancelled');
       }
 
+      if (ticket.isRefunded) {
+        throw new ConflictException('Ticket has been refunded');
+      }
+
       if (ticket.isRedeemed) {
         throw new ConflictException('Ticket has already been redeemed');
       }
@@ -174,6 +179,7 @@ export class TicketRedemptionService {
           id: ticket.id,
           isRedeemed: false,
           isCancelled: false,
+          isRefunded: false,
         },
         data: {
           isRedeemed: true,

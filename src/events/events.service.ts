@@ -8,6 +8,7 @@ import {
 import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { RefundsService } from '../refunds/refunds.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { QueryAdminEventsDto } from './dto/query-admin-events.dto';
@@ -29,6 +30,7 @@ export class EventsService {
     private readonly prisma: PrismaService,
     private readonly cloudinary: CloudinaryService,
     private readonly auditLogs: AuditLogsService,
+    private readonly refundsService: RefundsService,
   ) {}
 
   async getEvents() {
@@ -853,20 +855,17 @@ export class EventsService {
       );
     }
 
-    // Check if there are any PAID orders associated with this event
-    const paidOrders = event.ticketTypes.flatMap((tt) =>
-      tt.orderItems
-        .filter((oi) => oi.order.paymentStatus === 'PAID')
-        .map((oi) => oi.order),
-    );
-
-    if (paidOrders.length > 0) {
-      throw new ConflictException(
-        `Cannot cancel event with ${paidOrders.length} existing paid order(s). Refund operations are required first.`,
-      );
-    }
-
     const updatedEvent = await this.prisma.$transaction(async (tx) => {
+      // If event is refundable, trigger automatic 100% cancellation refunds
+      if (event.isRefundable) {
+        await this.refundsService.triggerAutomaticEventCancellationRefunds(
+          eventId,
+          reason.trim(),
+          actorId,
+          tx,
+        );
+      }
+
       const updated = await tx.event.update({
         where: { id: eventId },
         data: {

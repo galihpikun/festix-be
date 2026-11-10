@@ -199,6 +199,7 @@ describe('TicketRedemptionService', () => {
           id: 'ticket-1',
           isRedeemed: false,
           isCancelled: false,
+          isRefunded: false,
         },
         data: {
           isRedeemed: true,
@@ -319,6 +320,21 @@ describe('TicketRedemptionService', () => {
       mockPrisma.issuedTicket.findUnique.mockResolvedValue({
         ...mockTicketForRedeem,
         isCancelled: true,
+      });
+      mockPrisma.eventStaff.findUnique.mockResolvedValue({
+        eventId: 'event-1',
+        userId: staffUserId,
+      });
+
+      await expect(service.redeemTicket(staffUserId, dto)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('should throw ConflictException if ticket is refunded', async () => {
+      mockPrisma.issuedTicket.findUnique.mockResolvedValue({
+        ...mockTicketForRedeem,
+        isRefunded: true,
       });
       mockPrisma.eventStaff.findUnique.mockResolvedValue({
         eventId: 'event-1',

@@ -44,8 +44,17 @@ enum PaymentStatus {
 
 enum RefundStatus {
   PENDING
+  PENDING_APPROVAL
+  REJECTED
+  APPROVED
+  PROCESSING
   SUCCEEDED
   FAILED
+}
+
+enum RefundType {
+  CUSTOMER_REQUEST
+  EVENT_CANCELLATION
 }
 
 enum OrganizerDocumentType {
@@ -182,6 +191,7 @@ model Event {
   ticketTypes     TicketType[]
   staffs          EventStaff[]
   staffInvitations StaffInvitation[]
+  refunds         Refund[]
 
   @@map("events")
 }
@@ -280,30 +290,55 @@ model IssuedTicket {
   ticketCode  String    @unique @map("ticket_code")
   isRedeemed  Boolean   @default(false) @map("is_redeemed")
   isCancelled Boolean   @default(false) @map("is_cancelled")
+  isRefunded  Boolean   @default(false) @map("is_refunded")
   redeemedAt  DateTime? @map("redeemed_at")
+  refundedAt  DateTime? @map("refunded_at")
+  refundId    String?   @map("refund_id")
   createdAt   DateTime  @default(now()) @map("created_at")
 
   // Relations
   orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  refund      Refund?   @relation(fields: [refundId], references: [id], onDelete: SetNull)
 
   @@map("issued_tickets")
 }
 
 model Refund {
-  id             String       @id @default(uuid())
-  orderId        String       @map("order_id")
-  requestedById  String       @map("requested_by_id")
-  amount         Decimal      @db.Decimal(12, 2)
-  reason         String       @db.Text
-  pgRefundId     String?      @map("pg_refund_id") // ID refund Xendit
-  status         RefundStatus @default(PENDING)
-  createdAt      DateTime     @default(now()) @map("created_at")
-  updatedAt      DateTime     @updatedAt @map("updated_at")
+  id              String       @id @default(uuid())
+  orderId         String       @map("order_id")
+  eventId         String       @map("event_id")
+  requestedById   String       @map("requested_by_id")
+  type            RefundType   @default(CUSTOMER_REQUEST)
+  status          RefundStatus @default(PENDING_APPROVAL)
+  originalAmount  Decimal      @map("original_amount") @db.Decimal(12, 2)
+  deductionAmount Decimal      @default(0) @map("deduction_amount") @db.Decimal(12, 2)
+  amount          Decimal      @db.Decimal(12, 2)
+  reason          String       @db.Text
+  adminReason     String?      @map("admin_reason") @db.Text
+  failureReason   String?      @map("failure_reason") @db.Text
+  pgRefundId      String?      @map("pg_refund_id")
+  idempotencyKey  String?      @unique @map("idempotency_key")
+  approvedById    String?      @map("approved_by_id")
+  approvedAt      DateTime?    @map("approved_at")
+  rejectedById    String?      @map("rejected_by_id")
+  rejectedAt      DateTime?    @map("rejected_at")
+  succeededAt     DateTime?    @map("succeeded_at")
+  failedAt        DateTime?    @map("failed_at")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
 
   // Relations
-  order          Order        @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  requestedBy    User         @relation("UserRefunds", fields: [requestedById], references: [id], onDelete: Restrict)
+  order           Order        @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  event           Event        @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  requestedBy     User         @relation("UserRefunds", fields: [requestedById], references: [id], onDelete: Restrict)
+  issuedTickets   IssuedTicket[]
 
+  @@unique([orderId, eventId, type], name: "order_event_refund_unique")
+  @@index([orderId])
+  @@index([eventId])
+  @@index([status])
+  @@index([requestedById])
+  @@index([pgRefundId])
   @@map("refunds")
 }
 
