@@ -251,7 +251,72 @@ export class OrdersService {
     }
   }
 
+  async expireOrder(orderId: string): Promise<boolean> {
+    return await this.prisma.$transaction(async (tx) => {
+      const updatedOrder = await tx.order.updateMany({
+        where: {
+          id: orderId,
+          paymentStatus: 'PENDING',
+          expiresAt: { lt: new Date() },
+        },
+        data: {
+          paymentStatus: 'EXPIRED',
+        },
+      });
+
+      if (updatedOrder.count === 0) {
+        return false;
+      }
+
+      const orderItems = await tx.orderItem.findMany({
+        where: {
+          orderId,
+        },
+      });
+
+      for (const orderItem of orderItems) {
+        await tx.ticketType.update({
+          where: {
+            id: orderItem.ticketTypeId,
+          },
+          data: {
+            availableQuota: {
+              increment: orderItem.quantity,
+            },
+          },
+        });
+      }
+
+      return true;
+    });
+  }
+
+  async expirePendingOrders(userId?: string): Promise<number> {
+    const expiredOrders = await this.prisma.order.findMany({
+      where: {
+        paymentStatus: 'PENDING',
+        expiresAt: { lt: new Date() },
+        ...(userId && { userId }),
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    let count = 0;
+    for (const order of expiredOrders) {
+      const expired = await this.expireOrder(order.id);
+      if (expired) {
+        count++;
+      }
+    }
+
+    return count;
+  }
+
   async getOrders(userId: string) {
+    await this.expirePendingOrders(userId);
+
     return this.prisma.order.findMany({
       where: {
         userId,
@@ -274,7 +339,7 @@ export class OrdersService {
   }
 
   async getOrderDetail(userId: string, orderId: string) {
-    const order = await this.prisma.order.findUnique({
+    let order = await this.prisma.order.findUnique({
       where: {
         id: orderId,
       },
@@ -299,10 +364,33 @@ export class OrdersService {
       throw new ForbiddenException('You do not have access to this order');
     }
 
+    if (order.paymentStatus === 'PENDING' && order.expiresAt < new Date()) {
+      await this.expireOrder(order.id);
+      const refreshed = await this.prisma.order.findUnique({
+        where: { id: orderId },
+        include: {
+          orderItems: {
+            include: {
+              ticketType: {
+                include: {
+                  event: true,
+                },
+              },
+            },
+          },
+        },
+      });
+      if (refreshed) {
+        order = refreshed;
+      }
+    }
+
     return order;
   }
 
   async getAdminOrders(query?: QueryAdminOrdersDto) {
+    await this.expirePendingOrders();
+
     const page = query?.page || 1;
     const limit = query?.limit || 10;
     const skip = (page - 1) * limit;
@@ -412,6 +500,52 @@ export class OrdersService {
 
     if (!order) {
       throw new NotFoundException('Order not found');
+    }
+
+    if (order.paymentStatus === 'PENDING' && order.expiresAt < new Date()) {
+      await this.expireOrder(order.id);
+      const refreshed = await this.prisma.order.findUnique({
+        where: { id: orderId },
+        include: {
+          user: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+            },
+          },
+          orderItems: {
+            include: {
+              ticketType: {
+                include: {
+                  event: {
+                    select: {
+                      id: true,
+                      title: true,
+                      location: true,
+                      startDatetime: true,
+                      endDatetime: true,
+                    },
+                  },
+                },
+              },
+              issuedTickets: {
+                select: {
+                  id: true,
+                  ticketCode: true,
+                  isRedeemed: true,
+                  isCancelled: true,
+                  redeemedAt: true,
+                  createdAt: true,
+                },
+              },
+            },
+          },
+        },
+      });
+      if (refreshed) {
+        return refreshed;
+      }
     }
 
     return order;

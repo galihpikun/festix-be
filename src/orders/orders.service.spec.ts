@@ -421,4 +421,163 @@ describe('OrdersService', () => {
       ).rejects.toThrow(NotFoundException);
     });
   });
+
+  describe('expireOrder and automatic expiration', () => {
+    it('should transition PENDING expired order to EXPIRED and restore quota', async () => {
+      const orderId = 'order-expired-1';
+      const mockOrderItems = [
+        {
+          id: 'oi-1',
+          orderId,
+          ticketTypeId: 'tt-a',
+          quantity: 3,
+        },
+        {
+          id: 'oi-2',
+          orderId,
+          ticketTypeId: 'tt-b',
+          quantity: 2,
+        },
+      ];
+
+      const expireTx = {
+        order: {
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        },
+        orderItem: {
+          findMany: jest.fn().mockResolvedValue(mockOrderItems),
+        },
+        ticketType: {
+          update: jest.fn().mockResolvedValue({}),
+        },
+      };
+
+      mockPrisma.$transaction.mockImplementationOnce(
+        async (cb: (tx: typeof expireTx) => Promise<unknown>) => cb(expireTx),
+      );
+
+      const result = await service.expireOrder(orderId);
+
+      expect(result).toBe(true);
+      expect(expireTx.order.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: orderId,
+          paymentStatus: 'PENDING',
+          expiresAt: { lt: expect.any(Date) },
+        },
+        data: {
+          paymentStatus: 'EXPIRED',
+        },
+      });
+
+      expect(expireTx.ticketType.update).toHaveBeenCalledTimes(2);
+      expect(expireTx.ticketType.update).toHaveBeenCalledWith({
+        where: { id: 'tt-a' },
+        data: { availableQuota: { increment: 3 } },
+      });
+      expect(expireTx.ticketType.update).toHaveBeenCalledWith({
+        where: { id: 'tt-b' },
+        data: { availableQuota: { increment: 2 } },
+      });
+    });
+
+    it('should not restore quota if order is already PAID (race condition protection)', async () => {
+      const orderId = 'order-paid-race';
+
+      const expireTx = {
+        order: {
+          updateMany: jest.fn().mockResolvedValue({ count: 0 }), // order was already marked PAID or updated
+        },
+        orderItem: {
+          findMany: jest.fn(),
+        },
+        ticketType: {
+          update: jest.fn(),
+        },
+      };
+
+      mockPrisma.$transaction.mockImplementationOnce(
+        async (cb: (tx: typeof expireTx) => Promise<unknown>) => cb(expireTx),
+      );
+
+      const result = await service.expireOrder(orderId);
+
+      expect(result).toBe(false);
+      expect(expireTx.orderItem.findMany).not.toHaveBeenCalled();
+      expect(expireTx.ticketType.update).not.toHaveBeenCalled();
+    });
+
+    it('should not restore quota a second time if already EXPIRED (idempotency)', async () => {
+      const orderId = 'order-already-expired';
+
+      const expireTx = {
+        order: {
+          updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+        },
+        orderItem: {
+          findMany: jest.fn(),
+        },
+        ticketType: {
+          update: jest.fn(),
+        },
+      };
+
+      mockPrisma.$transaction.mockImplementationOnce(
+        async (cb: (tx: typeof expireTx) => Promise<unknown>) => cb(expireTx),
+      );
+
+      const result = await service.expireOrder(orderId);
+
+      expect(result).toBe(false);
+      expect(expireTx.ticketType.update).not.toHaveBeenCalled();
+    });
+
+    it('should find expired pending orders and expire each in expirePendingOrders', async () => {
+      mockPrisma.order.findMany.mockResolvedValueOnce([
+        { id: 'exp-1' },
+        { id: 'exp-2' },
+      ]);
+
+      const expireOrderSpy = jest
+        .spyOn(service, 'expireOrder')
+        .mockResolvedValue(true);
+
+      const count = await service.expirePendingOrders('user-1');
+
+      expect(count).toBe(2);
+      expect(mockPrisma.order.findMany).toHaveBeenCalledWith({
+        where: {
+          paymentStatus: 'PENDING',
+          expiresAt: { lt: expect.any(Date) },
+          userId: 'user-1',
+        },
+        select: {
+          id: true,
+        },
+      });
+      expect(expireOrderSpy).toHaveBeenCalledWith('exp-1');
+      expect(expireOrderSpy).toHaveBeenCalledWith('exp-2');
+
+      expireOrderSpy.mockRestore();
+    });
+
+    it('should automatically trigger expiration check when getOrders is called', async () => {
+      const expirePendingSpy = jest
+        .spyOn(service, 'expirePendingOrders')
+        .mockResolvedValue(1);
+
+      mockPrisma.order.findMany.mockResolvedValueOnce([]);
+
+      await service.getOrders('user-1');
+
+      expect(expirePendingSpy).toHaveBeenCalledWith('user-1');
+      expect(mockPrisma.order.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { userId: 'user-1' },
+        }),
+      );
+
+      expirePendingSpy.mockRestore();
+    });
+  });
 });
